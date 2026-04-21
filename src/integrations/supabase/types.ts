@@ -14,7 +14,267 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      dpo_hints: {
+        Row: {
+          hint_text: string
+          id: string
+          scenario_id: string
+          session_player_id: string
+          used_at: string | null
+        }
+        Insert: {
+          hint_text: string
+          id?: string
+          scenario_id: string
+          session_player_id: string
+          used_at?: string | null
+        }
+        Update: {
+          hint_text?: string
+          id?: string
+          scenario_id?: string
+          session_player_id?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dpo_hints_session_player_id_fkey"
+            columns: ["session_player_id"]
+            isOneToOne: false
+            referencedRelation: "session_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_sessions: {
+        Row: {
+          created_at: string | null
+          ended_at: string | null
+          host_id: string | null
+          id: string
+          mode: string
+          room_code: string | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          mode: string
+          room_code?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          ended_at?: string | null
+          host_id?: string | null
+          id?: string
+          mode?: string
+          room_code?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_sessions_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leaderboard: {
+        Row: {
+          compliance_pct: number
+          display_name: string
+          final_score: number
+          id: string
+          max_level_reached: number
+          outcome: string
+          player_id: string | null
+          role: string
+          session_id: string | null
+          submitted_at: string | null
+        }
+        Insert: {
+          compliance_pct: number
+          display_name: string
+          final_score: number
+          id?: string
+          max_level_reached: number
+          outcome: string
+          player_id?: string | null
+          role: string
+          session_id?: string | null
+          submitted_at?: string | null
+        }
+        Update: {
+          compliance_pct?: number
+          display_name?: string
+          final_score?: number
+          id?: string
+          max_level_reached?: number
+          outcome?: string
+          player_id?: string | null
+          role?: string
+          session_id?: string | null
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leaderboard_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leaderboard_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_seed: string | null
+          created_at: string | null
+          display_name: string
+          id: string
+        }
+        Insert: {
+          avatar_seed?: string | null
+          created_at?: string | null
+          display_name: string
+          id: string
+        }
+        Update: {
+          avatar_seed?: string | null
+          created_at?: string | null
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      scenario_answers: {
+        Row: {
+          answered_at: string | null
+          choice: string
+          dpdp_concept: string
+          id: string
+          is_correct: boolean
+          level: number
+          role: string
+          scenario_id: string
+          score_delta: number
+          session_player_id: string
+        }
+        Insert: {
+          answered_at?: string | null
+          choice: string
+          dpdp_concept: string
+          id?: string
+          is_correct: boolean
+          level: number
+          role: string
+          scenario_id: string
+          score_delta: number
+          session_player_id: string
+        }
+        Update: {
+          answered_at?: string | null
+          choice?: string
+          dpdp_concept?: string
+          id?: string
+          is_correct?: boolean
+          level?: number
+          role?: string
+          scenario_id?: string
+          score_delta?: number
+          session_player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_answers_session_player_id_fkey"
+            columns: ["session_player_id"]
+            isOneToOne: false
+            referencedRelation: "session_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_players: {
+        Row: {
+          completed_at: string | null
+          compliance_meter: number
+          current_level: number
+          current_scenario_index: number
+          dpo_tokens: number
+          id: string
+          joined_at: string | null
+          player_id: string
+          revenue: number
+          role: string
+          score: number
+          session_id: string
+          shift_timer: number
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          compliance_meter?: number
+          current_level?: number
+          current_scenario_index?: number
+          dpo_tokens?: number
+          id?: string
+          joined_at?: string | null
+          player_id: string
+          revenue?: number
+          role: string
+          score?: number
+          session_id: string
+          shift_timer?: number
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          compliance_meter?: number
+          current_level?: number
+          current_scenario_index?: number
+          dpo_tokens?: number
+          id?: string
+          joined_at?: string | null
+          player_id?: string
+          revenue?: number
+          role?: string
+          score?: number
+          session_id?: string
+          shift_timer?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_players_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_players_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
