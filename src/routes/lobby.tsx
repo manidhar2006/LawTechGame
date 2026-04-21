@@ -26,7 +26,6 @@ function LobbyPage() {
   const search = Route.useSearch();
   const { user, profile, loading: authLoading } = useAuth();
 
-  // Onboarding gate
   useEffect(() => {
     if (typeof window !== "undefined" && !localStorage.getItem("dg_onboarded")) {
       navigate({ to: "/onboarding" });
@@ -47,9 +46,17 @@ function LobbyPage() {
   }
 
   if (!search.mode) return <ModeSelection />;
-  if (search.mode === "solo") return <SoloFlow userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
+  if (search.mode === "solo")
+    return <SoloFlow userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
   if (search.join) return <JoinFlow userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
-  if (search.session) return <WaitingLobby sessionId={search.session} userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
+  if (search.session)
+    return (
+      <WaitingLobby
+        sessionId={search.session}
+        userId={user.id}
+        displayName={profile?.display_name ?? "Agent"}
+      />
+    );
   return <MultiplayerHostFlow userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
 }
 
@@ -63,17 +70,23 @@ function ModeSelection() {
       <AppHeader />
       <main className="max-w-3xl mx-auto px-4 pt-12">
         <h1 className="font-display text-3xl mb-2">Choose your mode</h1>
-        <p className="text-muted-foreground mb-8">Solo to learn at your pace, or multiplayer to challenge a colleague live.</p>
+        <p className="text-muted-foreground mb-8">
+          Solo to learn at your own pace, or multiplayer to run a live training round with multiple Principals.
+        </p>
         <div className="grid md:grid-cols-2 gap-4">
           <Link to="/lobby" search={{ mode: "solo" }} className="group rounded-xl border border-border bg-surface p-6 hover:border-primary/40 hover:glow-primary transition">
             <div className="text-2xl mb-2">🎯</div>
             <h2 className="font-display text-xl mb-1">Solo</h2>
-            <p className="text-sm text-muted-foreground">Play at your own pace. Full learning recap at the end.</p>
+            <p className="text-sm text-muted-foreground">
+              Play at your own pace. Full learning recap at the end.
+            </p>
           </Link>
           <Link to="/lobby" search={{ mode: "multiplayer" }} className="group rounded-xl border border-border bg-surface p-6 hover:border-[var(--principal)]/40 transition">
             <div className="text-2xl mb-2">⚡</div>
-            <h2 className="font-display text-xl mb-1">Multiplayer</h2>
-            <p className="text-sm text-muted-foreground">Challenge a colleague. Live scoreboard. Room code sharing.</p>
+            <h2 className="font-display text-xl mb-1">Multiplayer (live)</h2>
+            <p className="text-sm text-muted-foreground">
+              One Fiduciary hosts, pushes scenarios in real-time to many connected Principals.
+            </p>
           </Link>
         </div>
       </main>
@@ -146,38 +159,18 @@ function SoloFlow({ userId, displayName }: { userId: string; displayName: string
 
 function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayName: string }) {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"choose" | "join_or_create">("choose");
+  const [busy, setBusy] = useState(false);
 
-  if (step === "choose") {
-    return (
-      <div className="min-h-screen">
-        <AppHeader />
-        <main className="max-w-2xl mx-auto px-4 pt-12">
-          <h1 className="font-display text-3xl mb-2">Multiplayer</h1>
-          <p className="text-muted-foreground mb-8">Hi {displayName}. Host a new room or join with a code.</p>
-          <div className="grid md:grid-cols-2 gap-4">
-            <button onClick={() => setStep("join_or_create")} className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40">
-              <div className="text-xl mb-2">🆕</div>
-              <h2 className="font-display text-lg">Host a new room</h2>
-              <p className="text-sm text-muted-foreground mt-1">Pick your role and share the 6-character code.</p>
-            </button>
-            <Link to="/lobby" search={{ mode: "multiplayer", join: true }} className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40">
-              <div className="text-xl mb-2">🔗</div>
-              <h2 className="font-display text-lg">Join with code</h2>
-              <p className="text-sm text-muted-foreground mt-1">Enter a 6-character room code from the host.</p>
-            </Link>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  const create = async (role: Role) => {
+  const hostNewRoom = async () => {
+    setBusy(true);
     try {
       let roomCode = generateRoomCode();
-      // collision-check up to 5 times
       for (let i = 0; i < 5; i++) {
-        const { data: existing } = await supabase.from("game_sessions").select("id").eq("room_code", roomCode).maybeSingle();
+        const { data: existing } = await supabase
+          .from("game_sessions")
+          .select("id")
+          .eq("room_code", roomCode)
+          .maybeSingle();
         if (!existing) break;
         roomCode = generateRoomCode();
       }
@@ -187,21 +180,52 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
         .select()
         .single();
       if (error) throw error;
-      const { error: spErr } = await supabase.from("session_players").insert({ session_id: gs.id, player_id: userId, role });
+      // Host always plays Fiduciary in multiplayer (many-to-one)
+      const { error: spErr } = await supabase
+        .from("session_players")
+        .insert({ session_id: gs.id, player_id: userId, role: "fiduciary" });
       if (spErr) throw spErr;
       navigate({ to: "/lobby", search: { mode: "multiplayer", session: gs.id } });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed");
+      setBusy(false);
     }
   };
 
   return (
     <div className="min-h-screen">
       <AppHeader />
-      <main className="max-w-3xl mx-auto px-4 pt-12">
-        <h1 className="font-display text-3xl mb-1">Pick your role</h1>
-        <p className="text-muted-foreground mb-8">Your opponent will play the opposite role.</p>
-        <RoleCardPicker onPick={create} />
+      <main className="max-w-2xl mx-auto px-4 pt-12">
+        <h1 className="font-display text-3xl mb-2">Multiplayer (live)</h1>
+        <p className="text-muted-foreground mb-8">
+          Hi {displayName}. As host you play the <span className="text-[var(--fiduciary)] font-medium">Fiduciary</span> and
+          push scenarios to many connected <span className="text-[var(--principal)] font-medium">Principals</span> in
+          real time. Many Principals can join one Fiduciary.
+        </p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <button
+            onClick={hostNewRoom}
+            disabled={busy}
+            className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40 disabled:opacity-50"
+          >
+            <div className="text-xl mb-2">🆕</div>
+            <h2 className="font-display text-lg">Host as Fiduciary</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Get a room code, invite Principals, push scenarios live.
+            </p>
+          </button>
+          <Link
+            to="/lobby"
+            search={{ mode: "multiplayer", join: true }}
+            className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40"
+          >
+            <div className="text-xl mb-2">🔗</div>
+            <h2 className="font-display text-lg">Join as Principal</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enter a 6-character room code from your Fiduciary.
+            </p>
+          </Link>
+        </div>
       </main>
     </div>
   );
@@ -219,14 +243,23 @@ function JoinFlow({ userId, displayName }: { userId: string; displayName: string
       const upper = code.trim().toUpperCase();
       const { data: gs } = await supabase.from("game_sessions").select("*").eq("room_code", upper).maybeSingle();
       if (!gs) throw new Error("Room not found");
-      if (gs.status !== "lobby") throw new Error("Room is no longer accepting players");
-      const { data: existing } = await supabase.from("session_players").select("*").eq("session_id", gs.id);
-      if (existing && existing.length >= 2) throw new Error("Room is full");
-      const hostRole = existing?.[0]?.role;
-      const myRole: Role = hostRole === "fiduciary" ? "principal" : "fiduciary";
-      const { error } = await supabase.from("session_players").insert({ session_id: gs.id, player_id: userId, role: myRole });
-      if (error) throw error;
-      toast.success(`Joined as ${myRole}`);
+      if (gs.status === "completed") throw new Error("This session has ended");
+
+      // Already joined?
+      const { data: existing } = await supabase
+        .from("session_players")
+        .select("id,role")
+        .eq("session_id", gs.id)
+        .eq("player_id", userId)
+        .maybeSingle();
+
+      if (!existing) {
+        const { error } = await supabase
+          .from("session_players")
+          .insert({ session_id: gs.id, player_id: userId, role: "principal" });
+        if (error) throw error;
+      }
+      toast.success("Joined as Principal");
       navigate({ to: "/lobby", search: { mode: "multiplayer", session: gs.id } });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Could not join");
@@ -240,7 +273,9 @@ function JoinFlow({ userId, displayName }: { userId: string; displayName: string
       <AppHeader />
       <main className="max-w-md mx-auto px-4 pt-16">
         <h1 className="font-display text-3xl mb-1">Join a room</h1>
-        <p className="text-muted-foreground mb-6">Hi {displayName}, enter the 6-character code.</p>
+        <p className="text-muted-foreground mb-6">
+          Hi {displayName}, enter the 6-character code from your Fiduciary.
+        </p>
         <form onSubmit={join} className="space-y-3">
           <input
             value={code}
@@ -258,14 +293,22 @@ function JoinFlow({ userId, displayName }: { userId: string; displayName: string
   );
 }
 
-function WaitingLobby({ sessionId, userId }: { sessionId: string; userId: string; displayName: string }) {
+function WaitingLobby({
+  sessionId,
+  userId,
+  displayName,
+}: {
+  sessionId: string;
+  userId: string;
+  displayName: string;
+}) {
   const navigate = useNavigate();
   const { session, players, profiles, me } = useGameSession(sessionId, userId);
   const isHost = session?.host_id === userId;
-  const isFull = players.length === 2;
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const principals = players.filter((p) => p.role === "principal");
+  const fiduciary = players.find((p) => p.role === "fiduciary");
 
-  // Auto-redirect both clients when host starts game (status -> active)
+  // Auto-redirect everyone when host starts
   useEffect(() => {
     if (session?.status === "active") {
       navigate({ to: "/game/$sessionId", params: { sessionId } });
@@ -273,22 +316,15 @@ function WaitingLobby({ sessionId, userId }: { sessionId: string; userId: string
   }, [session?.status, sessionId, navigate]);
 
   const startGame = async () => {
-    setCountdown(3);
-  };
-
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown <= 0) {
-      supabase
-        .from("game_sessions")
-        .update({ status: "active", started_at: new Date().toISOString() })
-        .eq("id", sessionId)
-        .then(() => navigate({ to: "/game/$sessionId", params: { sessionId } }));
+    if (principals.length === 0) {
+      toast.error("Need at least one Principal connected");
       return;
     }
-    const t = setTimeout(() => setCountdown((n) => (n ?? 1) - 1), 1000);
-    return () => clearTimeout(t);
-  }, [countdown, sessionId, navigate]);
+    await supabase
+      .from("game_sessions")
+      .update({ status: "active", started_at: new Date().toISOString() })
+      .eq("id", sessionId);
+  };
 
   const copyCode = () => {
     if (session?.room_code) {
@@ -304,13 +340,17 @@ function WaitingLobby({ sessionId, userId }: { sessionId: string; userId: string
       <AppHeader />
       <main className="max-w-2xl mx-auto px-4 pt-12">
         <h1 className="font-display text-3xl mb-1">Waiting room</h1>
-        <p className="text-muted-foreground mb-6">Share this code with your opponent.</p>
+        <p className="text-muted-foreground mb-6">
+          {isHost
+            ? `Hi ${displayName}, share this code with your Principals. Start when at least one has joined.`
+            : `Hi ${displayName}, hang tight — the Fiduciary will start the session.`}
+        </p>
 
         {session.room_code && (
           <div className="rounded-xl border border-border bg-surface p-6 text-center mb-6">
             <div className="text-xs uppercase text-muted-foreground tracking-widest mb-2">Room Code</div>
             <div className="font-mono text-5xl font-bold tracking-[0.3em] mb-4">{session.room_code}</div>
-            <div className="flex gap-2 justify-center">
+            <div className="flex gap-2 justify-center flex-wrap">
               <button onClick={copyCode} className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium">Copy code</button>
               <a
                 href={`https://wa.me/?text=Join%20me%20on%20DataGuardian!%20Code:%20${session.room_code}%20%E2%80%94%20${encodeURIComponent(window.location.origin)}/lobby?mode=multiplayer&join=true`}
@@ -323,35 +363,52 @@ function WaitingLobby({ sessionId, userId }: { sessionId: string; userId: string
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {[0, 1].map((slot) => {
-            const p = players[slot];
-            return (
-              <div key={slot} className={`rounded-lg border p-4 ${p ? "border-border bg-surface" : "border-dashed border-border bg-surface-2/40"}`}>
-                {p ? (
-                  <>
-                    <div className="font-medium truncate">{profiles[p.player_id]?.display_name ?? "Player"}</div>
-                    <RoleBadge role={p.role} className="mt-1.5" />
-                    {p.player_id === session.host_id && <span className="ml-2 text-[10px] text-[var(--gold)] uppercase">Host</span>}
-                  </>
-                ) : (
-                  <div className="text-sm text-muted-foreground">Waiting for player…</div>
-                )}
-              </div>
-            );
-          })}
+        {/* Fiduciary slot */}
+        <div className="mb-3">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Fiduciary (host)</h3>
+          <div className="rounded-lg border border-border bg-surface px-4 py-3 flex items-center justify-between">
+            <span className="font-medium truncate">
+              {fiduciary ? profiles[fiduciary.player_id]?.display_name ?? "Fiduciary" : "—"}
+            </span>
+            <RoleBadge role="fiduciary" />
+          </div>
         </div>
 
-        {isHost && (
-          countdown !== null ? (
-            <div className="text-center font-display text-6xl py-6 animate-pulse-ring">{countdown || "GO"}</div>
-          ) : (
-            <button onClick={startGame} disabled={!isFull} className="w-full py-3 rounded-md bg-accent text-accent-foreground font-semibold disabled:opacity-40">
-              {isFull ? "Start Game" : "Waiting for opponent…"}
-            </button>
-          )
+        {/* Principal slots (dynamic) */}
+        <div className="mb-6">
+          <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+            Principals ({principals.length} connected)
+          </h3>
+          <ul className="space-y-1.5">
+            {principals.length === 0 && (
+              <li className="rounded-lg border border-dashed border-border bg-surface-2/40 px-4 py-3 text-sm text-muted-foreground">
+                Waiting for Principals to join…
+              </li>
+            )}
+            {principals.map((p) => (
+              <li key={p.id} className="rounded-lg border border-border bg-surface px-4 py-3 flex items-center justify-between">
+                <span className="font-medium truncate">
+                  {profiles[p.player_id]?.display_name ?? "Principal"}
+                </span>
+                <RoleBadge role="principal" />
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {isHost ? (
+          <button
+            onClick={startGame}
+            disabled={principals.length === 0}
+            className="w-full py-3 rounded-md bg-accent text-accent-foreground font-semibold disabled:opacity-40"
+          >
+            {principals.length === 0 ? "Waiting for at least one Principal…" : `Start session (${principals.length} principal${principals.length === 1 ? "" : "s"})`}
+          </button>
+        ) : (
+          <div className="text-center text-sm text-muted-foreground">
+            Waiting for the Fiduciary to start the session…
+          </div>
         )}
-        {!isHost && <div className="text-center text-sm text-muted-foreground">Waiting for host to start…</div>}
       </main>
     </div>
   );
