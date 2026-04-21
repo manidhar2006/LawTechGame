@@ -32,9 +32,14 @@ export interface Scenario {
   dpoHint: string;
 }
 
+// Tuned scoring tables (April 2026 content review)
+//   A = correct, principled action  → big score, big compliance gain
+//   B = partially correct           → small score, neutral compliance
+//   C = wrong shortcut              → revenue tempting, compliance hit
+//   D = clear violation             → high revenue, severe compliance hit
 const baseScores = { A: 100, B: 60, C: -50, D: -150 } as const;
-const baseCompliance = { A: 5, B: 0, C: -15, D: -15 } as const;
-const baseRevenue = { A: -2000, B: -1000, C: 5000, D: 10000 } as const;
+const baseCompliance = { A: 6, B: 0, C: -18, D: -28 } as const;
+const baseRevenue = { A: -2000, B: -500, C: 5000, D: 10000 } as const;
 
 const sc = (s: Omit<Scenario, "correctChoice" | "choiceScores" | "choiceComplianceDelta">): Scenario => ({
   ...s,
