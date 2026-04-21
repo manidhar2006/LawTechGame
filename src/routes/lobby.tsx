@@ -21,6 +21,26 @@ export const Route = createFileRoute("/lobby")({
   component: LobbyPage,
 });
 
+async function ensureProfileExists(userId: string, displayName: string) {
+  const { error } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        display_name: displayName || "Agent",
+      },
+      { onConflict: "id" },
+    );
+  if (error) throw error;
+}
+
+function isRoomCodeConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = "code" in error ? error.code : undefined;
+  const maybeMessage = "message" in error ? String(error.message ?? "") : "";
+  return maybeCode === "23505" || maybeMessage.toLowerCase().includes("room_code");
+}
+
 function LobbyPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -129,6 +149,8 @@ function SoloFlow({ userId, displayName }: { userId: string; displayName: string
   const create = async (role: Role) => {
     setCreating(true);
     try {
+      await ensureProfileExists(userId, displayName);
+
       const { data: gs, error } = await supabase
         .from("game_sessions")
         .insert({ host_id: userId, mode: "solo", status: "active", started_at: new Date().toISOString() })
@@ -164,22 +186,38 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
   const hostNewRoom = async () => {
     setBusy(true);
     try {
-      let roomCode = generateRoomCode();
-      for (let i = 0; i < 5; i++) {
-        const { data: existing } = await supabase
+      await ensureProfileExists(userId, displayName);
+
+      let gs: { id: string } | null = null;
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const roomCode = generateRoomCode();
+        const { data, error } = await supabase
           .from("game_sessions")
+          .upsert(
+            { host_id: userId, mode: "multiplayer", status: "lobby", room_code: roomCode },
+            { onConflict: "room_code", ignoreDuplicates: true },
+          )
           .select("id")
-          .eq("room_code", roomCode)
           .maybeSingle();
-        if (!existing) break;
-        roomCode = generateRoomCode();
+
+        if (data?.id) {
+          gs = data;
+          break;
+        }
+
+        if (error && !isRoomCodeConflict(error)) {
+          throw error;
+        }
+
+        lastError = error ?? lastError;
       }
-      const { data: gs, error } = await supabase
-        .from("game_sessions")
-        .insert({ host_id: userId, mode: "multiplayer", status: "lobby", room_code: roomCode })
-        .select()
-        .single();
-      if (error) throw error;
+
+      if (!gs) {
+        throw lastError ?? new Error("Could not generate a unique room code. Please try again.");
+      }
+
       // Host always plays Fiduciary in multiplayer (many-to-one)
       const { error: spErr } = await supabase
         .from("session_players")
@@ -240,6 +278,8 @@ function JoinFlow({ userId, displayName }: { userId: string; displayName: string
     e.preventDefault();
     setBusy(true);
     try {
+      await ensureProfileExists(userId, displayName);
+
       const upper = code.trim().toUpperCase();
       const { data: gs } = await supabase.from("game_sessions").select("*").eq("room_code", upper).maybeSingle();
       if (!gs) throw new Error("Room not found");

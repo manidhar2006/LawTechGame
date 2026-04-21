@@ -58,14 +58,15 @@ function AuthPage() {
       const guestName = `Agent_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const guestEmail = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@dataguardian.local`;
       const guestPass = crypto.randomUUID();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: guestEmail,
         password: guestPass,
         options: { data: { display_name: guestName } },
       });
       if (error) throw error;
-      // Auto sign in (in case email confirm is on, signUp returns session if not required)
-      await supabase.auth.signInWithPassword({ email: guestEmail, password: guestPass });
+      if (!data.session) {
+        throw new Error("Guest sign-in is unavailable because email confirmation is required.");
+      }
       toast.success(`Welcome, ${guestName}!`);
       navigate({ to: "/lobby" });
     } catch (err: unknown) {

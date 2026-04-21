@@ -30,6 +30,11 @@ interface ProfileLite {
   display_name: string;
 }
 
+function uniqueSuffix() {
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${randomPart}`;
+}
+
 /**
  * Live multi-principal multiplayer session.
  * - Fetches game_session, all session_players, all live_rounds and live_answers
@@ -98,12 +103,20 @@ export function useLiveSession(sessionId: string | undefined, currentUserId: str
     let mounted = true;
     setLoading(true);
 
+    // In React strict mode, effects can mount twice. Ensure no stale channel
+    // with the same topic remains subscribed before registering callbacks.
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     Promise.all([fetchSession(), fetchPlayers(), fetchRounds(), fetchAnswers()]).finally(() => {
       if (mounted) setLoading(false);
     });
 
+    const channelName = `live:${sessionId}:${uniqueSuffix()}`;
     const ch = supabase
-      .channel(`live:${sessionId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "session_players", filter: `session_id=eq.${sessionId}` },
@@ -129,7 +142,10 @@ export function useLiveSession(sessionId: string | undefined, currentUserId: str
     channelRef.current = ch;
     return () => {
       mounted = false;
-      ch.unsubscribe();
+      supabase.removeChannel(ch);
+      if (channelRef.current === ch) {
+        channelRef.current = null;
+      }
     };
   }, [sessionId, fetchSession, fetchPlayers, fetchRounds, fetchAnswers]);
 

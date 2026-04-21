@@ -34,6 +34,11 @@ interface ProfileLite {
   display_name: string;
 }
 
+function uniqueSuffix() {
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  return `${Date.now().toString(36)}-${randomPart}`;
+}
+
 export function useGameSession(sessionId: string | undefined, currentUserId: string | undefined) {
   const [session, setSession] = useState<GameSessionRow | null>(null);
   const [players, setPlayers] = useState<SessionPlayerRow[]>([]);
@@ -79,13 +84,21 @@ export function useGameSession(sessionId: string | undefined, currentUserId: str
     let mounted = true;
     setLoading(true);
 
+    // In React strict mode, effects can mount twice. Ensure no stale channel
+    // with the same topic remains subscribed before registering callbacks.
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     Promise.all([fetchSession(), fetchPlayers()]).finally(() => {
       if (mounted) setLoading(false);
     });
 
     // Realtime subscription
+    const channelName = `game:${sessionId}:${uniqueSuffix()}`;
     const ch = supabase
-      .channel(`game:${sessionId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "session_players", filter: `session_id=eq.${sessionId}` },
@@ -106,7 +119,10 @@ export function useGameSession(sessionId: string | undefined, currentUserId: str
 
     return () => {
       mounted = false;
-      ch.unsubscribe();
+      supabase.removeChannel(ch);
+      if (channelRef.current === ch) {
+        channelRef.current = null;
+      }
     };
   }, [sessionId, fetchPlayers, fetchSession]);
 
