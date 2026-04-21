@@ -67,7 +67,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §4 + §6: a Data Fiduciary may only process the minimum personal data necessary for the stated purpose. Aadhaar biometrics are never required for routine KYC.",
     dpoHint:
-      "Apply Data Minimisation under DPDP §4 — only collect what is strictly required for the specific purpose.",
+      "DPDP §4 — collect the minimum data needed for the stated purpose. Aadhaar biometrics are NEVER required for routine KYC; name + address suffice.",
   }),
   sc({
     id: "L1-02", level: 1, scenarioNumber: 2, totalInLevel: 4,
@@ -86,7 +86,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(2): a Data Fiduciary remains liable for any Data Processor it engages. A signed Data Processing Agreement is mandatory before any access — verbal approvals are non-compliant.",
     dpoHint:
-      "Under DPDP §8(2), any third-party processor must be engaged via a written contract before data flows.",
+      "DPDP §8(2) — the Fiduciary stays liable for any Processor it engages. NO written DPA = NO data flow. Verbal approvals carry zero legal weight.",
   }),
   sc({
     id: "L1-03", level: 1, scenarioNumber: 3, totalInLevel: 4,
@@ -104,7 +104,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §12(3): a Data Principal has the right to erasure of personal data once the purpose is fulfilled, unless retention is required by law.",
     dpoHint:
-      "Send a formal §12 erasure request in writing — informal opt-outs do not trigger statutory obligations.",
+      "DPDP §12(3) — file a written erasure request citing the section and ask for confirmation within the statutory window. Unsubscribe links don't trigger statutory duties; written requests do.",
   }),
   sc({
     id: "L1-04", level: 1, scenarioNumber: 4, totalInLevel: 4,
@@ -122,7 +122,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6: consent must be free, specific, informed, unconditional and unambiguous — pre-ticked boxes are invalid consent.",
     dpoHint:
-      "Pre-ticked consent is not consent under DPDP §6 — every purpose needs an explicit, separate opt-in.",
+      "DPDP §6 — consent must be free, specific, informed, unconditional and unambiguous. Pre-ticked boxes fail every one of those tests. Each new purpose needs its own opt-in.",
   }),
 
   // ===== LEVEL 2 — APPLICATION (6) =====
@@ -143,7 +143,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(6): every personal data breach must be reported to the Data Protection Board AND each affected Data Principal — the 72-hour clock runs from discovery.",
     dpoHint:
-      "DPDP §8(6) mandates breach notification to the DPB and affected principals — silence is itself a violation.",
+      "DPDP §8(6) — breach notification to the DPB AND every affected principal is mandatory. The 72-hr clock runs from DISCOVERY, not from convenience. Silence compounds liability.",
   }),
   sc({
     id: "L2-02", level: 2, scenarioNumber: 2, totalInLevel: 6,
@@ -162,7 +162,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6(3): consent notice must be available in English or any of the 22 languages in the 8th Schedule of the Constitution. Consent is invalid if the principal cannot understand it.",
     dpoHint:
-      "DPDP §6(3) — consent notices must be offered in the principal's language. Provide a translation.",
+      "DPDP §6(3) — consent notices must be available in English or any of the 22 Schedule-8 languages. A thumb impression on a form the principal can't read is NOT informed consent.",
   }),
   sc({
     id: "L2-03", level: 2, scenarioNumber: 3, totalInLevel: 6,
@@ -180,7 +180,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §9: data of children must be processed in a manner verifiably consented to by the parent and never used for tracking, behavioural monitoring, or targeted advertising.",
     dpoHint:
-      "DPDP §9 prohibits behavioural tracking or targeting of minors — challenge any non-essential data ask.",
+      "DPDP §9 — minors' data needs verifiable parental consent and is OFF-LIMITS for behavioural tracking, profiling, or targeted ads. Social media handles fail every necessity test for health insurance.",
   }),
   sc({
     id: "L2-04", level: 2, scenarioNumber: 4, totalInLevel: 6,
@@ -198,7 +198,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(7): a Data Fiduciary must erase personal data once the purpose is no longer being served and consent is withdrawn — unless retention is required by law.",
     dpoHint:
-      "Use §12 erasure + §13 grievance escalation. The DPB is the statutory next step if ignored.",
+      "DPDP §12 (erasure) → §13 (grievance) → §25 (DPB). Always escalate the ladder formally. Twitter outrage isn't a statutory remedy.",
   }),
   sc({
     id: "L2-05", level: 2, scenarioNumber: 5, totalInLevel: 6,
@@ -217,7 +217,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(6): breach notification is mandatory within the prescribed window — health data is highly sensitive and delaying notification compounds liability.",
     dpoHint:
-      "Discovery starts the 72-hour clock — internal hierarchy cannot override statutory duty to notify.",
+      "DPDP §8(6) — discovery starts the 72-hr clock. Health data is highly sensitive; CEO instructions cannot override statutory notification duty. Notify in parallel with internal triage.",
   }),
   sc({
     id: "L2-06", level: 2, scenarioNumber: 6, totalInLevel: 6,
@@ -236,7 +236,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §7: processing must be tied to a specified purpose for which consent was given. Re-purposing for AI training requires fresh, specific consent and a DPA.",
     dpoHint:
-      "Purpose limitation under §7 — past consent does not authorise new uses, even if anonymised.",
+      "DPDP §7 — purpose limitation. Loan-application data was collected for lending; AI-model training is a NEW purpose needing fresh consent. Anonymisation alone doesn't cure a missing legal basis.",
   }),
 
   // ===== LEVEL 3 — ADVANCED (16) =====
@@ -257,7 +257,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §17: state exemptions apply only to notified instrumentalities and lawful procedures. Without a court order or formal direction, the bank cannot disclose personal data.",
     dpoHint:
-      "§17 exemptions require lawful authority — ask for a court order before sharing any principal data.",
+      "DPDP §17 — state exemptions only apply with lawful authority. ALWAYS demand a court order or formal direction in writing before releasing principal data, regardless of who asked.",
   }),
   sc({
     id: "L3-02", level: 3, scenarioNumber: 2, totalInLevel: 16,
@@ -276,7 +276,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(7) read with PMLA: personal data must be erased once the retention purpose lapses. Indefinite storage is a §8(7) violation.",
     dpoHint:
-      "PMLA = 5 years post-closure. After that, retention has no lawful basis under DPDP §8(7).",
+      "DPDP §8(7) + PMLA — KYC retention ceiling is 5 years post-closure. Beyond that, indefinite storage has no lawful basis. Schedule deletions, log them, document the policy.",
   }),
   sc({
     id: "L3-03", level: 3, scenarioNumber: 3, totalInLevel: 16,
@@ -295,7 +295,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6 + §7: consent is purpose-bound. Marketing requires its own granular consent — old loan-processing consent cannot be repurposed.",
     dpoHint:
-      "Each new purpose needs its own consent under §6/§7. Bundled or repurposed consent is invalid.",
+      "DPDP §6 + §7 — consent is purpose-bound. 'Loan processing' consent does NOT authorise marketing. Get fresh, granular marketing consent before launching.",
   }),
   sc({
     id: "L3-04", level: 3, scenarioNumber: 4, totalInLevel: 16,
@@ -314,7 +314,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(6): the obligation to notify is independent of internal investigation timelines. The clock starts on discovery, not on root-cause analysis.",
     dpoHint:
-      "Discovery = 72-hr clock. HR investigation runs in parallel, not before notification.",
+      "DPDP §8(6) — discovery starts the 72-hr clock. HR investigations and breach notifications run IN PARALLEL, not in sequence. Preserve evidence; notify regardless.",
   }),
   sc({
     id: "L3-05", level: 3, scenarioNumber: 5, totalInLevel: 16,
@@ -332,7 +332,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §12: the principal has a right to correction and erasure of inaccurate data. The Fiduciary cannot offload this duty to a third party (the credit bureau).",
     dpoHint:
-      "§12 places the correction duty on the Fiduciary. They cannot deflect to CIBIL.",
+      "DPDP §12 — the correction duty sits with the Fiduciary that holds the inaccurate data. Banks CANNOT offload it to credit bureaus. Demand correction in writing AND raise the CIBIL dispute in parallel.",
   }),
   sc({
     id: "L3-06", level: 3, scenarioNumber: 6, totalInLevel: 16,
@@ -350,7 +350,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "Puttaswamy v. Union of India (2017): privacy is a fundamental right. DPDP gives statutory expression to informational self-determination — public visibility ≠ consent.",
     dpoHint:
-      "Puttaswamy + DPDP §3 — public visibility is not lawful basis. Consent is still required.",
+      "Puttaswamy (2017) + DPDP §3 — privacy is a fundamental right under Art. 21. PUBLIC visibility ≠ consent to process. Even scraped public data needs a lawful basis under DPDP.",
   }),
   sc({
     id: "L3-07", level: 3, scenarioNumber: 7, totalInLevel: 16,
@@ -369,7 +369,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6 + §11: consent must be specific. Sharing with unrelated partners is unauthorised, and the principal has the right to know all recipients of their data.",
     dpoHint:
-      "§11 grants the right to a list of every party data was shared with. Implied consent is not a thing under DPDP.",
+      "DPDP §11 grants the right to a list of EVERY recipient of your data. 'Implied consent' is not a thing under DPDP — sharing without specific consent is unauthorised, period. Retract data and trigger a DPA review.",
   }),
   sc({
     id: "L3-08", level: 3, scenarioNumber: 8, totalInLevel: 16,
@@ -387,7 +387,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6 + §11: profiling requires explicit, informed consent. Inferred data is personal data and is subject to the right to erasure.",
     dpoHint:
-      "Inferred / derived data is personal data under DPDP — same rights of access and erasure apply.",
+      "DPDP §6 + §11 — inferred / derived data IS personal data. Profiling needs explicit consent; you can demand the legal basis, the source list, and erasure of all derived insights.",
   }),
   sc({
     id: "L3-09", level: 3, scenarioNumber: 9, totalInLevel: 16,
@@ -406,7 +406,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §4 + RBI KYC Master Direction: collect only data necessary for the customer category. Excess collection (social media, every passport page) breaches §4.",
     dpoHint:
-      "RBI KYC + DPDP §4 — match the document set to the customer category, no more.",
+      "RBI KYC Master Direction + DPDP §4 — match documents to customer category. PAN is 'not held' for foreign nationals without one; demanding social media or every passport page is excess collection and a §4 violation.",
   }),
   sc({
     id: "L3-10", level: 3, scenarioNumber: 10, totalInLevel: 16,
@@ -425,7 +425,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §8(7): once the retention basis ends, erase. 'Might be useful' is not a lawful basis.",
     dpoHint:
-      "No lawful basis = mandatory erasure under §8(7). Document the deletion.",
+      "DPDP §8(7) — once the retention basis lapses, erasure is mandatory. 'He might come back' or 'regulators might ask' are NOT lawful bases. Erase and log it.",
   }),
   sc({
     id: "L3-11", level: 3, scenarioNumber: 11, totalInLevel: 16,
@@ -444,7 +444,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §7 + §8(7): when the original purpose collapses, retention and reuse without fresh consent is unlawful.",
     dpoHint:
-      "Purpose dies → data dies. No reuse without a new §6 consent.",
+      "DPDP §7 + §8(7) — when the purpose dies, the data dies. You can't pivot the documents to pitch other products without fresh §6 consent.",
   }),
   sc({
     id: "L3-12", level: 3, scenarioNumber: 12, totalInLevel: 16,
@@ -462,7 +462,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §3: the Act applies to processing within India, irrespective of the principal's nationality or governing-law clauses.",
     dpoHint:
-      "DPDP §3 is territorial — processing in India = DPDP applies, period.",
+      "DPDP §3 is TERRITORIAL — processing within India triggers DPDP regardless of contract law or principal nationality. §11(1)(a)+(b) entitle you to the data summary AND the identity of every processor.",
   }),
   sc({
     id: "L3-13", level: 3, scenarioNumber: 13, totalInLevel: 16,
@@ -480,7 +480,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §16: cross-border transfers are restricted to countries notified by the Central Government. Receiving the data yourself avoids the restriction entirely.",
     dpoHint:
-      "Use §11 to receive your own data — bypasses §16 cross-border restrictions.",
+      "DPDP §16 restricts cross-border transfers to MeitY-notified countries. Workaround: invoke §11 to receive YOUR OWN data in machine-readable format, then forward it yourself — completely sidesteps §16.",
   }),
   sc({
     id: "L3-14", level: 3, scenarioNumber: 14, totalInLevel: 16,
@@ -498,7 +498,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §13 + §25: principals must first use the Fiduciary's grievance mechanism. After non-response in the prescribed period, escalate to the DPB.",
     dpoHint:
-      "§13 → §25 ladder: Fiduciary grievance first, then DPB.",
+      "DPDP §13 → §25 — exhaust the Fiduciary's grievance mechanism first, then escalate to the DPB. After 30 days of non-response, the DPB route is open. Foreign DPAs (AEPD) have no jurisdiction over India-based processing.",
   }),
   sc({
     id: "L3-15", level: 3, scenarioNumber: 15, totalInLevel: 16,
@@ -517,7 +517,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6 + §10: bundled ToS is not valid consent. Significant Data Fiduciaries must maintain a verifiable, granular consent audit trail.",
     dpoHint:
-      "Bundled ToS = not consent under DPDP §6. Acknowledge and remediate.",
+      "DPDP §6 + §10 — bundled ToS from 2019 fails the 'specific & granular' test. Significant Data Fiduciaries must keep a verifiable, timestamped consent audit trail. Acknowledge the gap, halt the marketing, and remediate.",
   }),
   sc({
     id: "L3-16", level: 3, scenarioNumber: 16, totalInLevel: 16,
@@ -535,7 +535,7 @@ export const SCENARIOS: Scenario[] = [
     explanation:
       "DPDP §6(4): the procedure to withdraw consent must be as easy as the procedure to give consent. Friction-by-design is itself a violation.",
     dpoHint:
-      "DPDP §6(4) — withdrawal must be as easy as giving consent. Escalate the friction.",
+      "DPDP §6(4) — withdrawing consent must be AS EASY as giving it. A 7-step branch visit when the original opt-in was 1 in-app tap is friction-by-design and itself a violation. Escalate to the Nodal Officer, then the DPB.",
   }),
 ];
 
