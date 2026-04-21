@@ -141,6 +141,102 @@ export type Database = {
           },
         ]
       }
+      live_answers: {
+        Row: {
+          answered_at: string
+          choice: string
+          id: string
+          is_correct: boolean
+          player_id: string
+          round_id: string
+          score_delta: number
+          session_id: string
+          session_player_id: string
+        }
+        Insert: {
+          answered_at?: string
+          choice: string
+          id?: string
+          is_correct: boolean
+          player_id: string
+          round_id: string
+          score_delta: number
+          session_id: string
+          session_player_id: string
+        }
+        Update: {
+          answered_at?: string
+          choice?: string
+          id?: string
+          is_correct?: boolean
+          player_id?: string
+          round_id?: string
+          score_delta?: number
+          session_id?: string
+          session_player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_answers_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "live_rounds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "live_answers_session_player_id_fkey"
+            columns: ["session_player_id"]
+            isOneToOne: false
+            referencedRelation: "session_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_rounds: {
+        Row: {
+          ended_at: string | null
+          id: string
+          pushed_at: string
+          round_number: number
+          scenario_id: string
+          session_id: string
+          status: string
+        }
+        Insert: {
+          ended_at?: string | null
+          id?: string
+          pushed_at?: string
+          round_number: number
+          scenario_id: string
+          session_id: string
+          status?: string
+        }
+        Update: {
+          ended_at?: string | null
+          id?: string
+          pushed_at?: string
+          round_number?: number
+          scenario_id?: string
+          session_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_rounds_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_seed: string | null

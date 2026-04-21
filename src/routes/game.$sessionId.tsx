@@ -12,9 +12,8 @@ import { ShiftTimer } from "@/components/game/ShiftTimer";
 import { DPOModal } from "@/components/game/DPOModal";
 import { FailureOverlay } from "@/components/game/FailureOverlay";
 import { LevelTransition } from "@/components/game/LevelTransition";
-import { OpponentHUD } from "@/components/game/OpponentHUD";
 import { RoleBadge, LevelBadge } from "@/components/ui/Badges";
-import { toast } from "sonner";
+import { MultiplayerLiveGame } from "@/components/game/MultiplayerLiveGame";
 
 export const Route = createFileRoute("/game/$sessionId")({
   component: GamePage,
@@ -24,7 +23,51 @@ function GamePage() {
   const { sessionId } = Route.useParams();
   const navigate = useNavigate();
   const { user, profile, loading: authLoading } = useAuth();
-  const { session, me, opponent, profiles, loading } = useGameSession(sessionId, user?.id);
+  const { session, me, loading } = useGameSession(sessionId, user?.id);
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading game…
+      </div>
+    );
+  }
+  if (!user) {
+    navigate({ to: "/auth" });
+    return null;
+  }
+  if (!session || !me) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Session not found.
+      </div>
+    );
+  }
+
+  // Multiplayer: route to the live, host-driven cockpit / principal view
+  if (session.mode === "multiplayer") {
+    return <MultiplayerLiveGame sessionId={sessionId} />;
+  }
+
+  // Solo path (unchanged)
+  return <SoloGame sessionId={sessionId} userId={user.id} displayName={profile?.display_name ?? "Agent"} />;
+}
+
+/* ------------------------------------------------------------------ */
+/* SOLO GAME (single-player flow, preserved as-is)                      */
+/* ------------------------------------------------------------------ */
+
+function SoloGame({
+  sessionId,
+  userId,
+  displayName,
+}: {
+  sessionId: string;
+  userId: string;
+  displayName: string;
+}) {
+  const navigate = useNavigate();
+  const { me } = useGameSession(sessionId, userId);
 
   const [showDpo, setShowDpo] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
@@ -33,44 +76,55 @@ function GamePage() {
   const queue = useMemo(() => (me ? getScenarioQueueForRole(me.role) : []), [me?.role]);
   const currentScenario = me ? queue[me.current_scenario_index] : null;
 
-  // Game end checks
   useEffect(() => {
     if (!me) return;
-    if (me.status !== "playing") {
-      // already over
-    }
   }, [me?.status]);
 
-  if (authLoading || loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading game…</div>;
-  if (!user) {
-    navigate({ to: "/auth" });
-    return null;
-  }
-  if (!session || !me) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Session not found.</div>;
+  if (!me) return null;
 
   const isFid = me.role === "fiduciary";
-  const isMultiplayer = session.mode === "multiplayer";
-  const isHost = session.host_id === user.id;
 
-  // Failure overlays
   if (me.status === "bankrupt") {
-    return <FailureOverlay type="bankrupt" score={me.score} level={me.current_level} onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })} />;
+    return (
+      <FailureOverlay
+        type="bankrupt"
+        score={me.score}
+        level={me.current_level}
+        onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })}
+      />
+    );
   }
   if (me.status === "timeout") {
-    return <FailureOverlay type="timeout" score={me.score} level={me.current_level} onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })} />;
+    return (
+      <FailureOverlay
+        type="timeout"
+        score={me.score}
+        level={me.current_level}
+        onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })}
+      />
+    );
   }
   if (me.status === "completed" || !currentScenario) {
-    // ensure status is set
     if (me.status === "playing" && !currentScenario) {
-      supabase.from("session_players").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", me.id);
+      supabase
+        .from("session_players")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", me.id);
     }
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md text-center bg-surface border border-border rounded-xl p-7 animate-slide-up">
           <div className="text-5xl mb-3">🏆</div>
           <h2 className="font-display text-2xl mb-2">All scenarios complete!</h2>
-          <p className="text-muted-foreground mb-5">Final score: <span className="font-mono font-bold text-foreground">{me.score}</span></p>
-          <button onClick={() => navigate({ to: "/results/$sessionId", params: { sessionId } })} className="w-full py-2.5 rounded-md bg-primary text-primary-foreground font-medium">View Learning Recap →</button>
+          <p className="text-muted-foreground mb-5">
+            Final score: <span className="font-mono font-bold text-foreground">{me.score}</span>
+          </p>
+          <button
+            onClick={() => navigate({ to: "/results/$sessionId", params: { sessionId } })}
+            className="w-full py-2.5 rounded-md bg-primary text-primary-foreground font-medium"
+          >
+            View Learning Recap →
+          </button>
         </div>
       </div>
     );
@@ -78,12 +132,17 @@ function GamePage() {
 
   const handleAnswer = (choice: Choice) => {
     const result = applyAnswer(
-      { score: me.score, compliance_meter: me.compliance_meter, revenue: me.revenue, shift_timer: me.shift_timer, role: me.role },
+      {
+        score: me.score,
+        compliance_meter: me.compliance_meter,
+        revenue: me.revenue,
+        shift_timer: me.shift_timer,
+        role: me.role,
+      },
       choice,
       currentScenario,
     );
 
-    // Persist answer
     supabase.from("scenario_answers").insert({
       session_player_id: me.id,
       scenario_id: currentScenario.id,
@@ -95,7 +154,6 @@ function GamePage() {
       dpdp_concept: currentScenario.dpdpConcepts.join(", "),
     });
 
-    // Update player state
     supabase
       .from("session_players")
       .update({
@@ -106,7 +164,6 @@ function GamePage() {
       .eq("id", me.id);
 
     if (result.isDpoAudit) setShowAudit(true);
-
     return result;
   };
 
@@ -117,33 +174,38 @@ function GamePage() {
     const nextLevel = nextScenario?.level ?? me.current_level;
     const levelChanged = nextScenario && nextScenario.level !== me.current_level;
 
-    // bankrupt check
     if (me.role === "fiduciary" && me.revenue <= 0) {
-      await supabase.from("session_players").update({ status: "bankrupt", completed_at: new Date().toISOString() }).eq("id", me.id);
+      await supabase
+        .from("session_players")
+        .update({ status: "bankrupt", completed_at: new Date().toISOString() })
+        .eq("id", me.id);
       return;
     }
 
     if (!nextScenario) {
-      await supabase.from("session_players").update({
-        current_scenario_index: nextIndex,
-        status: "completed",
-        completed_at: new Date().toISOString(),
-      }).eq("id", me.id);
+      await supabase
+        .from("session_players")
+        .update({
+          current_scenario_index: nextIndex,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", me.id);
       navigate({ to: "/results/$sessionId", params: { sessionId } });
       return;
     }
 
     if (levelChanged) {
-      // Show level transition
       setShowLevelDone(true);
-      await supabase.from("session_players").update({
-        current_scenario_index: nextIndex,
-        current_level: nextLevel,
-      }).eq("id", me.id);
+      await supabase
+        .from("session_players")
+        .update({ current_scenario_index: nextIndex, current_level: nextLevel })
+        .eq("id", me.id);
     } else {
-      await supabase.from("session_players").update({
-        current_scenario_index: nextIndex,
-      }).eq("id", me.id);
+      await supabase
+        .from("session_players")
+        .update({ current_scenario_index: nextIndex })
+        .eq("id", me.id);
     }
   };
 
@@ -159,30 +221,39 @@ function GamePage() {
   };
 
   const handleAuditAck = async () => {
-    const updated = applyDpoAuditPenalty({ score: me.score, compliance_meter: me.compliance_meter, revenue: me.revenue, shift_timer: me.shift_timer, role: me.role });
+    const updated = applyDpoAuditPenalty({
+      score: me.score,
+      compliance_meter: me.compliance_meter,
+      revenue: me.revenue,
+      shift_timer: me.shift_timer,
+      role: me.role,
+    });
     await supabase.from("session_players").update(updated).eq("id", me.id);
     setShowAudit(false);
   };
 
   const handleShiftTick = async (newSeconds: number) => {
     if (newSeconds % 5 === 0) {
-      await supabase.from("session_players").update({ shift_timer: Math.max(0, newSeconds) }).eq("id", me.id);
+      await supabase
+        .from("session_players")
+        .update({ shift_timer: Math.max(0, newSeconds) })
+        .eq("id", me.id);
     }
   };
 
   const handleTimeout = async () => {
-    await supabase.from("session_players").update({ status: "timeout", shift_timer: 0, completed_at: new Date().toISOString() }).eq("id", me.id);
+    await supabase
+      .from("session_players")
+      .update({ status: "timeout", shift_timer: 0, completed_at: new Date().toISOString() })
+      .eq("id", me.id);
   };
-
-  const opponentName = opponent ? profiles[opponent.player_id]?.display_name ?? "Opponent" : "";
 
   return (
     <div className="min-h-screen pb-12">
-      {/* Top HUD */}
       <header className="border-b border-border bg-background/85 backdrop-blur sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-sm truncate max-w-[120px]">{profile?.display_name ?? "Agent"}</span>
+            <span className="font-medium text-sm truncate max-w-[120px]">{displayName}</span>
             <RoleBadge role={me.role} />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
@@ -194,7 +265,6 @@ function GamePage() {
             <div className="font-mono font-bold text-lg tabular-nums">{me.score}</div>
           </div>
         </div>
-        {/* Meters row */}
         <div className="max-w-5xl mx-auto px-3 sm:px-4 pb-2 flex items-center gap-4 flex-wrap text-xs">
           <ComplianceMeter value={me.compliance_meter} />
           {isFid && <RevenueCounter value={me.revenue} />}
@@ -215,13 +285,6 @@ function GamePage() {
           </button>
         </div>
       </header>
-
-      {/* Opponent HUD - multiplayer */}
-      {isMultiplayer && opponent && (
-        <div className="fixed top-20 right-3 sm:right-4 z-10">
-          <OpponentHUD opponent={opponent} displayName={opponentName} />
-        </div>
-      )}
 
       <main className="max-w-3xl mx-auto px-3 sm:px-4 pt-6">
         <ScenarioCard
@@ -246,9 +309,7 @@ function GamePage() {
           score={me.score}
           compliance={me.compliance_meter}
           onContinue={() => setShowLevelDone(false)}
-          isHost={isHost}
-          opponentScore={opponent?.score}
-          opponentName={opponentName}
+          isHost={true}
         />
       )}
     </div>
