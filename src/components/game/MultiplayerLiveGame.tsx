@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -172,20 +172,34 @@ function FiduciaryCockpit({
     }
   };
 
-  // Auto-close + auto-advance when all connected principals have answered
-  useAutoAdvance({
-    enabled: !!allAnswered,
-    onTrigger: async () => {
-      await closeRound();
-      // Brief pause so principals see the resolution, then push next
+  // Auto-close + auto-advance when all connected principals have answered.
+  // Only the HOST runs this effect (the cockpit only renders for the host's role,
+  // but the round is "open" only after host action, so this is safe).
+  const advancedForRoundRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!allAnswered || !live.currentRound) return;
+    if (advancedForRoundRef.current === live.currentRound.id) return;
+    advancedForRoundRef.current = live.currentRound.id;
+
+    const roundId = live.currentRound.id;
+    const upcomingIndex = nextIndex; // queue[nextIndex] is the NEXT scenario after this open round was pushed → off by one
+    // The currently open round occupies index (nextIndex - 1). The next push is queue[nextIndex].
+    const next = queue[upcomingIndex] ?? null;
+
+    (async () => {
+      // Close current round
+      await supabase
+        .from("live_rounds")
+        .update({ status: "closed", ended_at: new Date().toISOString() })
+        .eq("id", roundId);
+
+      // Brief pause so Principals see the resolution panel
       setTimeout(() => {
-        const next = queue[nextIndex + 1] ?? null;
-        if (next) {
-          pushScenario(next);
-        }
+        if (next) pushScenario(next);
       }, 5000);
-    },
-  });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allAnswered, live.currentRound?.id]);
 
   return (
     <div className="grid lg:grid-cols-[1fr_320px] gap-6">
@@ -440,28 +454,4 @@ function PrincipalLiveView({
 /* HELPERS                                                              */
 /* ------------------------------------------------------------------ */
 
-function useAutoAdvance({ enabled, onTrigger }: { enabled: boolean; onTrigger: () => void }) {
-  // Use a ref to prevent multiple triggers per round
-  const triggeredRef = useTriggerOnce(enabled);
-  if (enabled && !triggeredRef.alreadyFired) {
-    triggeredRef.fire(onTrigger);
-  }
-}
-
-import { useRef as useReactRef, useEffect as useReactEffect } from "react";
-function useTriggerOnce(reset: boolean) {
-  const ref = useReactRef<{ fired: boolean }>({ fired: false });
-  useReactEffect(() => {
-    if (!reset) ref.current.fired = false;
-  }, [reset]);
-  return {
-    get alreadyFired() {
-      return ref.current.fired;
-    },
-    fire(cb: () => void) {
-      if (ref.current.fired) return;
-      ref.current.fired = true;
-      cb();
-    },
-  };
-}
+/* (auto-advance handled inline above via useEffect + ref guard) */
