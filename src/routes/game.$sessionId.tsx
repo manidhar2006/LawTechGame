@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useGameSession } from "@/hooks/useGameSession";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,13 +72,38 @@ function SoloGame({
   const [showDpo, setShowDpo] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [showLevelDone, setShowLevelDone] = useState(false);
+  const [completedLevel, setCompletedLevel] = useState<1 | 2 | 3 | null>(null);
+  const pendingPersistRef = useRef<Promise<void> | null>(null);
 
-  const queue = useMemo(() => (me ? getScenarioQueueForRole(me.role) : []), [me?.role]);
+  const queue = useMemo(() => (me ? getScenarioQueueForRole(me.role) : []), [me]);
   const currentScenario = me ? queue[me.current_scenario_index] : null;
+  const displayLevel = (currentScenario?.level ?? me?.current_level ?? 1) as 1 | 2 | 3;
 
   useEffect(() => {
     if (!me) return;
-  }, [me?.status]);
+
+    if (me.status === "playing" && !currentScenario) {
+      void Promise.all([
+        supabase
+          .from("session_players")
+          .update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("id", me.id),
+        supabase
+          .from("game_sessions")
+          .update({ status: "completed", ended_at: new Date().toISOString() })
+          .eq("id", sessionId),
+      ]);
+      return;
+    }
+
+    if (me.status === "playing") return;
+
+    void supabase
+      .from("game_sessions")
+      .update({ status: "completed", ended_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .neq("status", "completed");
+  }, [me, currentScenario, sessionId]);
 
   if (!me) return null;
 
@@ -89,7 +114,7 @@ function SoloGame({
       <FailureOverlay
         type="bankrupt"
         score={me.score}
-        level={me.current_level}
+        level={displayLevel}
         onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })}
       />
     );
@@ -99,18 +124,12 @@ function SoloGame({
       <FailureOverlay
         type="timeout"
         score={me.score}
-        level={me.current_level}
+        level={displayLevel}
         onRecap={() => navigate({ to: "/results/$sessionId", params: { sessionId } })}
       />
     );
   }
   if (me.status === "completed" || !currentScenario) {
-    if (me.status === "playing" && !currentScenario) {
-      supabase
-        .from("session_players")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", me.id);
-    }
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md text-center bg-surface border border-border rounded-xl p-7 animate-slide-up">
@@ -143,25 +162,36 @@ function SoloGame({
       currentScenario,
     );
 
-    supabase.from("scenario_answers").insert({
-      session_player_id: me.id,
-      scenario_id: currentScenario.id,
-      level: currentScenario.level,
-      role: me.role,
-      choice,
-      is_correct: result.isCorrect,
-      score_delta: result.scoreDelta,
-      dpdp_concept: currentScenario.dpdpConcepts.join(", "),
-    });
+    const persistPromise = (async () => {
+      const { error: ansErr } = await supabase.from("scenario_answers").insert({
+        session_player_id: me.id,
+        scenario_id: currentScenario.id,
+        level: currentScenario.level,
+        role: me.role,
+        choice,
+        is_correct: result.isCorrect,
+        score_delta: result.scoreDelta,
+        dpdp_concept: currentScenario.dpdpConcepts.join(", "),
+      });
 
-    supabase
-      .from("session_players")
-      .update({
-        score: result.newScore,
-        compliance_meter: result.newCompliance,
-        revenue: result.newRevenue,
-      })
-      .eq("id", me.id);
+      if (ansErr) throw ansErr;
+
+      const { error: playerErr } = await supabase
+        .from("session_players")
+        .update({
+          score: result.newScore,
+          compliance_meter: result.newCompliance,
+          revenue: result.newRevenue,
+        })
+        .eq("id", me.id);
+
+      if (playerErr) throw playerErr;
+    })();
+
+    pendingPersistRef.current = persistPromise;
+    void persistPromise.catch((error) => {
+      console.error("Failed to persist answer", error);
+    });
 
     if (result.isDpoAudit) setShowAudit(true);
     return result;
@@ -169,39 +199,64 @@ function SoloGame({
 
   const handleNext = async () => {
     if (!currentScenario) return;
+
+    if (pendingPersistRef.current) {
+      try {
+        await pendingPersistRef.current;
+      } catch {
+        return;
+      } finally {
+        pendingPersistRef.current = null;
+      }
+    }
+
     const nextIndex = me.current_scenario_index + 1;
     const nextScenario = queue[nextIndex];
     const nextLevel = nextScenario?.level ?? me.current_level;
     const levelChanged = nextScenario && nextScenario.level !== me.current_level;
 
     if (me.role === "fiduciary" && me.revenue <= 0) {
-      await supabase
-        .from("session_players")
-        .update({ status: "bankrupt", completed_at: new Date().toISOString() })
-        .eq("id", me.id);
+      await Promise.all([
+        supabase
+          .from("session_players")
+          .update({ status: "bankrupt", completed_at: new Date().toISOString() })
+          .eq("id", me.id),
+        supabase
+          .from("game_sessions")
+          .update({ status: "completed", ended_at: new Date().toISOString() })
+          .eq("id", sessionId),
+      ]);
       return;
     }
 
     if (!nextScenario) {
-      await supabase
-        .from("session_players")
-        .update({
-          current_scenario_index: nextIndex,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", me.id);
+      await Promise.all([
+        supabase
+          .from("session_players")
+          .update({
+            current_scenario_index: nextIndex,
+            status: "completed",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", me.id),
+        supabase
+          .from("game_sessions")
+          .update({ status: "completed", ended_at: new Date().toISOString() })
+          .eq("id", sessionId),
+      ]);
       navigate({ to: "/results/$sessionId", params: { sessionId } });
       return;
     }
 
     if (levelChanged) {
+      setCompletedLevel(currentScenario.level);
       setShowLevelDone(true);
       await supabase
         .from("session_players")
         .update({ current_scenario_index: nextIndex, current_level: nextLevel })
         .eq("id", me.id);
     } else {
+      setCompletedLevel(null);
       await supabase
         .from("session_players")
         .update({ current_scenario_index: nextIndex })
@@ -242,10 +297,16 @@ function SoloGame({
   };
 
   const handleTimeout = async () => {
-    await supabase
-      .from("session_players")
-      .update({ status: "timeout", shift_timer: 0, completed_at: new Date().toISOString() })
-      .eq("id", me.id);
+    await Promise.all([
+      supabase
+        .from("session_players")
+        .update({ status: "timeout", shift_timer: 0, completed_at: new Date().toISOString() })
+        .eq("id", me.id),
+      supabase
+        .from("game_sessions")
+        .update({ status: "completed", ended_at: new Date().toISOString() })
+        .eq("id", sessionId),
+    ]);
   };
 
   return (
@@ -257,8 +318,10 @@ function SoloGame({
             <RoleBadge role={me.role} />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-            <LevelBadge level={me.current_level as 1 | 2 | 3} />
-            <span>Scenario {me.current_scenario_index + 1}/{queue.length}</span>
+            <LevelBadge level={displayLevel} />
+            <span>
+              Scenario {currentScenario.scenarioNumber}/{currentScenario.totalInLevel}
+            </span>
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Score</div>
@@ -301,14 +364,17 @@ function SoloGame({
         <DPOModal hint={currentScenario.dpoHint} tokensRemaining={me.dpo_tokens} onClose={() => setShowDpo(false)} />
       )}
       {showAudit && (
-        <FailureOverlay type="audit" score={me.score} level={me.current_level} onContinue={handleAuditAck} />
+        <FailureOverlay type="audit" score={me.score} level={displayLevel} onContinue={handleAuditAck} />
       )}
       {showLevelDone && (
         <LevelTransition
-          level={me.current_level - 1 < 1 ? me.current_level : me.current_level}
+          level={completedLevel ?? displayLevel}
           score={me.score}
           compliance={me.compliance_meter}
-          onContinue={() => setShowLevelDone(false)}
+          onContinue={() => {
+            setShowLevelDone(false);
+            setCompletedLevel(null);
+          }}
           isHost={true}
         />
       )}

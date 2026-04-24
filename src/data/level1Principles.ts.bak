@@ -1,0 +1,389 @@
+export type Level1Choice = "A" | "B" | "C" | "D";
+
+export interface Level1PrincipleCard {
+  id: string;
+  title: string;
+  section: string;
+  summary: string;
+  question: string;
+  choices: Record<Level1Choice, string>;
+  correctChoice: Level1Choice;
+  explanation: string;
+}
+
+export const LEVEL1_PRINCIPLE_CARDS: Level1PrincipleCard[] = [
+  {
+    id: "P01",
+    title: "Official Title of Rules",
+    section: "Rule 1",
+    summary: "Short title and commencement framework.",
+    question: "What is the official title given to these rules under Rule 1(1)?",
+    choices: {
+      A: "Information Technology (Data Privacy) Rules 2025",
+      B: "Digital Personal Data Protection Rules 2025",
+      C: "Personal Data Protection Implementation Rules 2025",
+      D: "Digital India Privacy Framework 2025",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 1(1) explicitly titles the instrument as the Digital Personal Data Protection Rules 2025.",
+  },
+  {
+    id: "P02",
+    title: "Immediate Commencement Set",
+    section: "Rule 1",
+    summary: "Phased rollout begins with administrative provisions.",
+    question: "Which rules take immediate effect from the date of publication in the Gazette?",
+    choices: {
+      A: "Rules 1 to 23",
+      B: "Rules 3 to 10",
+      C: "Rules 1, 2, and 17 to 21",
+      D: "Rules 22 and 23",
+    },
+    correctChoice: "C",
+    explanation:
+      "Rule 1(2) mandates that Rules 1, 2, and 17 to 21 come into force upon publication.",
+  },
+  {
+    id: "P03",
+    title: "Consent Manager Timeline",
+    section: "Rule 1",
+    summary: "Rule 4 is activated before core compliance obligations.",
+    question: "What is the commencement timeline for Rule 4 (Consent Managers)?",
+    choices: {
+      A: "Immediate",
+      B: "Six months",
+      C: "One year",
+      D: "Eighteen months",
+    },
+    correctChoice: "C",
+    explanation: "Rule 1(3) specifies that Rule 4 comes into force one year after publication.",
+  },
+  {
+    id: "P04",
+    title: "Substantive Rule Commencement",
+    section: "Rule 1",
+    summary: "Core notice and security obligations are delayed to final phase.",
+    question:
+      "When do the substantive rules regarding Notice (Rule 3) and Security (Rule 6) become enforceable?",
+    choices: {
+      A: "November 2025",
+      B: "May 2026",
+      C: "November 2026",
+      D: "May 2027",
+    },
+    correctChoice: "D",
+    explanation:
+      "Rule 1(4) sets an eighteen-month window for these substantive rules, concluding in May 2027.",
+  },
+  {
+    id: "P05",
+    title: "Nodal Authority for Commencement",
+    section: "Rule 1",
+    summary: "Central Government issues commencement notifications.",
+    question:
+      "Who is the nodal authority empowered to appoint the commencement dates for the Act's provisions?",
+    choices: {
+      A: "The Data Protection Board",
+      B: "The Central Government",
+      C: "The Supreme Court of India",
+      D: "The Telecom Regulatory Authority of India",
+    },
+    correctChoice: "B",
+    explanation:
+      "Section 1(2) of the Act and related notifications are issued by the Central Government.",
+  },
+  {
+    id: "P06",
+    title: "Why Rule 4 Is Earlier",
+    section: "Rule 1",
+    summary: "Consent Manager ecosystem is prepared before full go-live.",
+    question: "Why is Rule 4 delayed by one year instead of eighteen months?",
+    choices: {
+      A: "Consent Managers are already established",
+      B: "To allow early registration of intermediaries before the rest of the Act goes live",
+      C: "Because it is less important",
+      D: "To wait for international standards",
+    },
+    correctChoice: "B",
+    explanation:
+      "Phased rollout allows the Consent Manager framework to be ready before full substantive compliance starts.",
+  },
+  {
+    id: "P07",
+    title: "Rule 7 Before Go-Live",
+    section: "Rule 1",
+    summary: "Breach obligations under Rule 7 start only in the final phase.",
+    question: "If a data breach occurs in January 2026, is the fiduciary liable under Rule 7?",
+    choices: {
+      A: "Yes, Rule 7 is immediate",
+      B: "No, Rule 7 comes into force eighteen months after publication (May 2027)",
+      C: "Only if the company is an SDF",
+      D: "Only if it is a government body",
+    },
+    correctChoice: "B",
+    explanation: "Rule 1(4) places Rule 7 in the eighteen-month commencement category.",
+  },
+  {
+    id: "P08",
+    title: "Purpose of Phased Rollout",
+    section: "Rule 1",
+    summary: "Transition period supports implementation readiness.",
+    question: "The phased rollout is intended to:",
+    choices: {
+      A: "Create confusion in the market",
+      B: "Allow organizations time to develop technology infrastructure and train personnel",
+      C: "Bypass the Supreme Court",
+      D: "Benefit foreign companies over local startups",
+    },
+    correctChoice: "B",
+    explanation:
+      "The transition period acknowledges significant technical and organizational changes needed for compliance.",
+  },
+  {
+    id: "P09",
+    title: "Why Rules 17 to 21 Are Immediate",
+    section: "Rule 1",
+    summary: "Regulatory machinery is established first.",
+    question: "Rules 17 to 21 coming into force immediately allows for:",
+    choices: {
+      A: "Immediate fining of companies",
+      B: "The appointment of the Board's Chairperson and setting up of the digital office",
+      C: "Public voting for Board members",
+      D: "Immediate deletion of all data",
+    },
+    correctChoice: "B",
+    explanation:
+      "Administrative rules are prioritized so the regulator exists before substantive enforcement begins.",
+  },
+  {
+    id: "P10",
+    title: "Act Reference in Rule 1",
+    section: "Rule 1",
+    summary: "Rule 1 references DPDP Act 2023, not IT Act replacement.",
+    question: "Does Rule 1 mention the Information Technology Act 2000?",
+    choices: {
+      A: "Yes, as a replacement",
+      B: "No, it refers to the DPDP Act 2023",
+      C: "Yes, it states IT Act is now void",
+      D: "Only in the preamble",
+    },
+    correctChoice: "B",
+    explanation: "Rule 1 specifically refers to the Digital Personal Data Protection Act, 2023.",
+  },
+  {
+    id: "P11",
+    title: "Definition of Act",
+    section: "Rule 2",
+    summary: "Rule 2 anchors terminology to the DPDP Act 2023.",
+    question: "What is the definition of 'Act' under Rule 2(1)(a)?",
+    choices: {
+      A: "Information Technology Act 2000",
+      B: "Digital Personal Data Protection Act 2023",
+      C: "Indian Contract Act 1872",
+      D: "Data Privacy and Security Act",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 2(1)(a) expressly states that 'Act' means the Digital Personal Data Protection Act 2023.",
+  },
+  {
+    id: "P12",
+    title: "Techno-Legal Measure References",
+    section: "Rule 2",
+    summary: "Techno-legal measures are tied to digital proceedings provisions.",
+    question: "According to Rule 2, where do 'techno-legal measures' find their primary reference?",
+    choices: {
+      A: "Rule 3 and 4",
+      B: "Rule 10 and 11",
+      C: "Rule 20 and 22",
+      D: "Rule 6 and 7",
+    },
+    correctChoice: "C",
+    explanation:
+      "Rule 2(1)(b) links techno-legal measures to Rule 20 (Board) and Rule 22 (Appellate Tribunal).",
+  },
+  {
+    id: "P13",
+    title: "User Account Scope",
+    section: "Rule 2",
+    summary: "User account includes multiple digital identifiers.",
+    question: "Which of the following is included in the definition of a 'user account'?",
+    choices: {
+      A: "Profiles, pages, and handles",
+      B: "Email address and mobile number",
+      C: "Registered online account",
+      D: "All of the above",
+    },
+    correctChoice: "D",
+    explanation:
+      "Rule 2(1)(c) includes an online account and identifiers like profiles, handles, email, and mobile.",
+  },
+  {
+    id: "P14",
+    title: "Mobile Number as User Account",
+    section: "Rule 2",
+    summary: "Mobile-first users are recognized for rights exercise.",
+    question: "What is the purpose of including 'mobile number' in the user account definition?",
+    choices: {
+      A: "To allow marketing calls",
+      B: "To ensure fiduciaries can be contacted by the government",
+      C: "To recognize mobile-based registration as a formal user account for rights exercise",
+      D: "To track location",
+    },
+    correctChoice: "C",
+    explanation:
+      "Including mobile registration ensures users of mobile-first services can exercise rights under the Rules.",
+  },
+  {
+    id: "P15",
+    title: "Verifiable Consent Linkage",
+    section: "Rule 2",
+    summary: "Verifiable consent maps to children and disability support mechanisms.",
+    question: "How is 'verifiable consent' defined in Rule 2(1)(d)?",
+    choices: {
+      A: "Any digital signature",
+      B: "Consent as specified in Rule 10 or 11",
+      C: "A double opt-in email",
+      D: "A recorded phone call",
+    },
+    correctChoice: "B",
+    explanation:
+      "Verifiable consent refers to the specific mechanisms under Rule 10 and Rule 11.",
+  },
+  {
+    id: "P16",
+    title: "Undefined Terms Interpretation",
+    section: "Rule 2",
+    summary: "Fallback meanings come from the parent Act.",
+    question:
+      "If a term is used in the Rules but not defined in Rule 2, where should its meaning be derived from?",
+    choices: {
+      A: "The Oxford English Dictionary",
+      B: "The Digital Personal Data Protection Act 2023",
+      C: "The IT Act 2000",
+      D: "Common industry usage",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 2(2) states that undefined terms in the Rules carry the meaning assigned in the Act.",
+  },
+  {
+    id: "P17",
+    title: "Techno-Legal Use Case",
+    section: "Rule 2",
+    summary: "Digital office functioning is core to techno-legal measures.",
+    question: "The term 'techno-legal measures' is primarily associated with:",
+    choices: {
+      A: "Cybersecurity software",
+      B: "Digital office functioning and proceedings",
+      C: "Contract drafting",
+      D: "Hardware sales",
+    },
+    correctChoice: "B",
+    explanation:
+      "These measures enable the Board and Tribunal to conduct proceedings through digital mechanisms.",
+  },
+  {
+    id: "P18",
+    title: "Handle as User Account",
+    section: "Rule 2",
+    summary: "Handles are explicitly covered under user account definition.",
+    question: "Is a social media 'handle' considered part of a user account?",
+    choices: {
+      A: "No, it is public information",
+      B: "Yes, under Rule 2(1)(c)",
+      C: "Only if it is verified",
+      D: "Only if it uses a real name",
+    },
+    correctChoice: "B",
+    explanation: "Rule 2(1)(c) specifically includes handles as part of user account coverage.",
+  },
+  {
+    id: "P19",
+    title: "Other Similar Presences",
+    section: "Rule 2",
+    summary: "Catch-all language future-proofs identity coverage.",
+    question: "Rule 2(1)(c) includes 'other similar presences.' This implies:",
+    choices: {
+      A: "A narrow interpretation restricted to email",
+      B: "A broad interpretation to capture emerging digital identities",
+      C: "Only physical presence at an office",
+      D: "It has no legal meaning",
+    },
+    correctChoice: "B",
+    explanation:
+      "The catch-all phrase is designed to include future digital identity forms.",
+  },
+  {
+    id: "P20",
+    title: "Gender-Neutral Interpretation",
+    section: "Rule 2",
+    summary: "Statutory pronoun usage is inclusive.",
+    question: "The word 'she' used throughout the rules includes:",
+    choices: {
+      A: "Only female individuals",
+      B: "Any individual regardless of gender",
+      C: "Only Data Fiduciaries",
+      D: "Only government officials",
+    },
+    correctChoice: "B",
+    explanation:
+      "By reference to the Act's definitions, pronoun usage is interpreted in a gender-inclusive manner.",
+  },
+  {
+    id: "P21",
+    title: "Standalone Notice Requirement",
+    section: "Rule 3",
+    summary: "Notice must be independently presented and understandable.",
+    question: "According to Rule 3, how must the notice be presented?",
+    choices: {
+      A: "Within the general Privacy Policy document",
+      B: "Independently of any other information provided by the fiduciary",
+      C: "As an appendix to the user manual",
+      D: "Via a voice recording only",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 3(a) requires notice to be presented independently so that it remains clear and understandable.",
+  },
+  {
+    id: "P22",
+    title: "Minimum Notice Contents",
+    section: "Rule 3",
+    summary: "Notice requires itemized data categories and specific purposes.",
+    question: "What specific details must be included in the notice at the minimum?",
+    choices: {
+      A: "Fiduciary's profit margins",
+      B: "An itemized description of personal data and specific purposes of processing",
+      C: "A list of all employees",
+      D: "The source code of the app",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 3(b) mandates itemized personal data descriptions and the specific purpose or use for processing.",
+  },
+  {
+    id: "P23",
+    title: "Ease of Consent Withdrawal",
+    section: "Rule 3",
+    summary: "Withdrawal links must be as easy to use as consent links.",
+    question: "How must the communication link for withdrawing consent be designed?",
+    choices: {
+      A: "It must require a written request",
+      B: "It must be comparable in ease to the process of giving consent",
+      C: "It must be hidden in the settings menu",
+      D: "It must take 48 hours to activate",
+    },
+    correctChoice: "B",
+    explanation:
+      "Rule 3(c)(i) requires that withdrawing consent be as easy as giving consent.",
+  },
+];
+
+export const LEVEL1_CARD_MAP = new Map(LEVEL1_PRINCIPLE_CARDS.map((card) => [card.id, card]));
+
+export function getLevel1CardById(cardId: string | null | undefined) {
+  if (!cardId) return null;
+  return LEVEL1_CARD_MAP.get(cardId) ?? null;
+}

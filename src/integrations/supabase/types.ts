@@ -141,6 +141,56 @@ export type Database = {
           },
         ]
       }
+      level1_sessions: {
+        Row: {
+          created_at: string
+          fiduciary_card_id: string | null
+          fiduciary_choice: string | null
+          fiduciary_is_correct: boolean | null
+          id: string
+          principal_card_id: string | null
+          principal_choice: string | null
+          principal_is_correct: boolean | null
+          session_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fiduciary_card_id?: string | null
+          fiduciary_choice?: string | null
+          fiduciary_is_correct?: boolean | null
+          id?: string
+          principal_card_id?: string | null
+          principal_choice?: string | null
+          principal_is_correct?: boolean | null
+          session_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fiduciary_card_id?: string | null
+          fiduciary_choice?: string | null
+          fiduciary_is_correct?: boolean | null
+          id?: string
+          principal_card_id?: string | null
+          principal_choice?: string | null
+          principal_is_correct?: boolean | null
+          session_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "level1_sessions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "game_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       live_answers: {
         Row: {
           answered_at: string

@@ -32,7 +32,6 @@ function AuthPage() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/lobby`,
             data: { display_name: displayName || email.split("@")[0] },
           },
         });
@@ -64,9 +63,6 @@ function AuthPage() {
         options: { data: { display_name: guestName } },
       });
       if (error) throw error;
-      if (!data.session) {
-        throw new Error("Guest sign-in is unavailable because email confirmation is required.");
-      }
       toast.success(`Welcome, ${guestName}!`);
       navigate({ to: "/lobby" });
     } catch (err: unknown) {
@@ -110,7 +106,7 @@ function AuthPage() {
               />
             )}
             <input
-              type="email"
+              type="text"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -119,9 +115,8 @@ function AuthPage() {
             />
             <input
               type="password"
-              placeholder="Password (min 6 chars)"
+              placeholder="Password"
               value={password}
-              minLength={6}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2.5 rounded-md bg-surface-2 border border-border focus:outline-none focus:border-primary"
               required

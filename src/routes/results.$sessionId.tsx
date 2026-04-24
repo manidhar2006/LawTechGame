@@ -1,11 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { RoleBadge } from "@/components/ui/Badges";
 import { toast } from "sonner";
 import { SCENARIOS } from "@/data/scenarios";
+import { getLevel1CardById } from "@/data/level1Principles";
 
 export const Route = createFileRoute("/results/$sessionId")({
   component: ResultsPage,
@@ -18,6 +19,7 @@ interface AnswerRow {
   choice: string;
   is_correct: boolean;
   dpdp_concept: string;
+  answered_at: string | null;
 }
 
 interface SP {
@@ -32,7 +34,6 @@ interface SP {
 
 function ResultsPage() {
   const { sessionId } = Route.useParams();
-  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [me, setMe] = useState<SP | null>(null);
   const [answers, setAnswers] = useState<AnswerRow[]>([]);
@@ -53,7 +54,8 @@ function ResultsPage() {
         const { data: ans } = await supabase
           .from("scenario_answers")
           .select("*")
-          .eq("session_player_id", sp.id);
+          .eq("session_player_id", sp.id)
+          .order("answered_at", { ascending: true });
         setAnswers((ans as AnswerRow[]) ?? []);
         // Check if already submitted
         const { data: lb } = await supabase.from("leaderboard").select("id").eq("session_id", sessionId).eq("player_id", user.id).maybeSingle();
@@ -63,6 +65,36 @@ function ResultsPage() {
     };
     load();
   }, [sessionId, user]);
+
+  const outcome: "completed" | "bankrupt" | "timeout" =
+    me?.status === "bankrupt" ? "bankrupt" : me?.status === "timeout" ? "timeout" : "completed";
+
+  const submit = useCallback(async (showToast = true) => {
+    if (submitted) return;
+    if (!user || !me) return;
+    try {
+      const { error } = await supabase.from("leaderboard").insert({
+        player_id: user.id,
+        display_name: profile?.display_name ?? "Agent",
+        role: me.role,
+        final_score: me.score,
+        max_level_reached: me.current_level,
+        compliance_pct: me.compliance_meter,
+        outcome,
+        session_id: sessionId,
+      });
+      if (error) throw error;
+      setSubmitted(true);
+      if (showToast) toast.success("Score submitted to leaderboard!");
+    } catch (err: unknown) {
+      if (showToast) toast.error(err instanceof Error ? err.message : "Failed to submit");
+    }
+  }, [submitted, user, me, profile?.display_name, sessionId, outcome]);
+
+  useEffect(() => {
+    if (loading || !user || !me || submitted) return;
+    void submit(false);
+  }, [loading, user, me, submitted, submit]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading recap…</div>;
   if (!me || !user) {
@@ -78,35 +110,58 @@ function ResultsPage() {
   const toRevisit: { concept: string; scenarioTitle: string }[] = [];
   answers.forEach((a) => {
     const sc = SCENARIOS.find((s) => s.id === a.scenario_id);
+    const level1Card = getLevel1CardById(a.scenario_id);
     const concept = a.dpdp_concept;
     if (a.is_correct) mastered.add(concept);
-    else toRevisit.push({ concept, scenarioTitle: sc?.title ?? a.scenario_id });
+    else toRevisit.push({ concept, scenarioTitle: sc?.title ?? level1Card?.title ?? a.scenario_id });
   });
   const masteredList = [...mastered];
 
-  const outcome: "completed" | "bankrupt" | "timeout" =
-    me.status === "bankrupt" ? "bankrupt" : me.status === "timeout" ? "timeout" : "completed";
+  const answerReview = answers.map((answer) => {
+    const scenario = SCENARIOS.find((s) => s.id === answer.scenario_id);
+    const level1Card = getLevel1CardById(answer.scenario_id);
+    if (!scenario) {
+      if (level1Card) {
+        const yourChoiceLabel = answer.choice as "A" | "B" | "C" | "D";
+        const correctChoiceLabel = level1Card.correctChoice;
+        return {
+          id: answer.id,
+          title: `${level1Card.title} (${level1Card.section})`,
+          level: answer.level,
+          yourChoiceLabel,
+          yourChoiceText: level1Card.choices[yourChoiceLabel],
+          correctChoiceLabel,
+          correctChoiceText: level1Card.choices[correctChoiceLabel],
+          isCorrect: answer.is_correct,
+        };
+      }
 
-  const submit = async () => {
-    if (submitted) return;
-    try {
-      const { error } = await supabase.from("leaderboard").insert({
-        player_id: user.id,
-        display_name: profile?.display_name ?? "Agent",
-        role: me.role,
-        final_score: me.score,
-        max_level_reached: me.current_level,
-        compliance_pct: me.compliance_meter,
-        outcome,
-        session_id: sessionId,
-      });
-      if (error) throw error;
-      setSubmitted(true);
-      toast.success("Score submitted to leaderboard!");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to submit");
+      return {
+        id: answer.id,
+        title: answer.scenario_id,
+        level: answer.level,
+        yourChoiceLabel: answer.choice,
+        yourChoiceText: "Answer text unavailable",
+        correctChoiceLabel: "A",
+        correctChoiceText: "Answer text unavailable",
+        isCorrect: answer.is_correct,
+      };
     }
-  };
+
+    const yourChoiceLabel = answer.choice as "A" | "B" | "C" | "D";
+    const correctChoiceLabel = scenario.correctChoice;
+
+    return {
+      id: answer.id,
+      title: scenario.title,
+      level: scenario.level,
+      yourChoiceLabel,
+      yourChoiceText: scenario.choices[yourChoiceLabel],
+      correctChoiceLabel,
+      correctChoiceText: scenario.choices[correctChoiceLabel],
+      isCorrect: answer.is_correct,
+    };
+  });
 
   return (
     <div className="min-h-screen">
@@ -130,7 +185,7 @@ function ResultsPage() {
             </dl>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <button onClick={submit} disabled={submitted} className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
+              <button onClick={() => void submit(true)} disabled={submitted} className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
                 {submitted ? "Submitted ✓" : "Submit to Leaderboard"}
               </button>
               <Link to="/lobby" className="px-4 py-2 rounded-md border border-border text-sm">Play Again</Link>
@@ -167,6 +222,40 @@ function ResultsPage() {
             </div>
           </section>
         </div>
+
+        <section className="mt-6 bg-surface border border-border rounded-xl p-6">
+          <h2 className="font-display text-xl mb-1">Answer Review</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Your submitted answer and the correct answer are shown for each scenario.
+          </p>
+
+          {answerReview.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recorded answers yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {answerReview.map((row, index) => (
+                <article key={row.id} className="rounded-lg border border-border bg-surface-2/40 p-4">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <h3 className="font-medium">{index + 1}. {row.title}</h3>
+                    <span className="text-xs font-mono text-muted-foreground">L{row.level}</span>
+                  </div>
+                  <div className="text-sm mb-1">
+                    <span className="text-muted-foreground">Your answer:</span>{" "}
+                    <span className={row.isCorrect ? "text-accent" : "text-[var(--warning)]"}>
+                      {row.yourChoiceLabel}. {row.yourChoiceText}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Correct answer:</span>{" "}
+                    <span className="text-accent">
+                      {row.correctChoiceLabel}. {row.correctChoiceText}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
