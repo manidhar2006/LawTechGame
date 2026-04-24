@@ -135,7 +135,7 @@ function ModeSelection() {
             <div className="text-2xl mb-2">⚡</div>
             <h2 className="font-display text-xl mb-1">Multiplayer (live)</h2>
             <p className="text-sm text-muted-foreground">
-              One Fiduciary and one Principal play Level-1 with live voice and cross-questioning.
+              One Fiduciary and one Principal play Level-1 (DPDP Principles) and Level-2 (Banking &amp; Insurance sector) with live voice and cross-questioning.
             </p>
           </Link>
         </div>
@@ -292,7 +292,7 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
         <h1 className="font-display text-3xl mb-2">Multiplayer (live)</h1>
         <p className="text-muted-foreground mb-8">
           Hi {displayName}. Room creator can be either role. Create as Fiduciary or Data Principal,
-          then invite the opposite role for the 1v1 Level-1 round.
+          then invite the opposite role for the Level-1 → Level-2 live experience.
         </p>
         <div className="grid md:grid-cols-3 gap-4">
           <button
@@ -576,7 +576,7 @@ function WaitingLobby({
           >
             {!fiduciary || principals.length === 0
               ? `Waiting for ${hostNeeds}…`
-              : "Start Level-1 session"}
+              : "Start Level-1 → Level-2 session"}
           </button>
         ) : (
           <div className="text-center text-sm text-muted-foreground">

@@ -1,0 +1,43 @@
+# Normalize line endings to LF in the repository for all text files.
+# Git will convert LF → CRLF on checkout on Windows (core.autocrlf=true default),
+# but the repo itself always stores LF — preventing the warnings.
+
+# Default: treat all text files as LF in repo
+* text=auto eol=lf
+
+# Explicitly enforce LF for source files
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.env   text eol=lf
+*.env.* text eol=lf
+*.sh    text eol=lf
+
+# Windows-specific scripts — keep CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Truly binary files — no line-ending conversion
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.lock  binary

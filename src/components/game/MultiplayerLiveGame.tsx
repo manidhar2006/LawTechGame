@@ -10,6 +10,7 @@ import {
 } from "@/data/level1Principles";
 import { LevelBadge, RoleBadge } from "@/components/ui/Badges";
 import { VoiceRoomPanel } from "@/components/game/VoiceRoomPanel";
+import { MultiplayerLevel2Game } from "@/components/game/MultiplayerLevel2Game";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -103,6 +104,8 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
   const level1 = useLevel1Session(sessionId, user?.id);
   const completionSynced = useRef(false);
   const answeringSynced = useRef(false);
+  // Level-2 phase: toggled locally (host broadcasts via a metadata field or simple redirect)
+  const [showLevel2, setShowLevel2] = useState(false);
 
   if (live.loading || level1.loading || !live.session || !live.me || !user) {
     return (
@@ -261,7 +264,25 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
     });
   }, [level1, state.fiduciary_card_id, state.principal_card_id, state.status]);
 
-  const finishLevel1 = async () => {
+  // Move to Level-2 (both players see this via the shared game_sessions metadata field)
+  // We reuse the game_sessions.status field: when the host sets it to "level2", both
+  // clients will mount MultiplayerLevel2Game instead.
+  useEffect(() => {
+    if (live.session?.status === "level2") {
+      setShowLevel2(true);
+    }
+  }, [live.session?.status]);
+
+  const startLevel2 = async () => {
+    if (!isHost) return;
+    await supabase
+      .from("game_sessions")
+      .update({ status: "level2" })
+      .eq("id", sessionId);
+    // Local state will be updated by the useEffect above via realtime
+  };
+
+  const finishLevel1ToRecap = async () => {
     if (isHost) {
       await supabase
         .from("game_sessions")
@@ -272,6 +293,11 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
   };
 
   const viewPhase = state.status;
+
+  // If Level-2 has been started, render the Level-2 game
+  if (showLevel2) {
+    return <MultiplayerLevel2Game sessionId={sessionId} />;
+  }
 
   return (
     <div className="min-h-screen pb-12">
@@ -365,17 +391,34 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             )}
 
             {state.status === "completed" && (
-              <div className="rounded-xl border border-border bg-surface p-5 mb-5">
-                <h2 className="font-display text-xl mb-2">Level-1 Completed</h2>
+              <div className="rounded-xl border border-accent/30 bg-accent/5 p-5 mb-5">
+                <h2 className="font-display text-xl mb-2">✅ Level-1 Completed!</h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Both players answered. You can now view the recap while Level-2 stays pending.
+                  Both players answered the DPDP principle questions.
+                  {isHost
+                    ? " As the host, you can start Level-2 (Banking & Insurance sector) or end the session."
+                    : " Waiting for the host to start Level-2 or end the session."}
                 </p>
-                <button
-                  onClick={() => void finishLevel1()}
-                  className="px-5 py-2.5 rounded-md bg-primary text-primary-foreground font-medium"
-                >
-                  View Learning Recap
-                </button>
+                {isHost ? (
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => void startLevel2()}
+                      className="px-5 py-2.5 rounded-md bg-accent text-accent-foreground font-semibold"
+                    >
+                      🏦 Start Level-2: Banking &amp; Insurance →
+                    </button>
+                    <button
+                      onClick={() => void finishLevel1ToRecap()}
+                      className="px-4 py-2.5 rounded-md border border-border bg-surface text-sm font-medium"
+                    >
+                      End Session &amp; View Recap
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    Waiting for host to start Level-2…
+                  </p>
+                )}
               </div>
             )}
 
@@ -454,11 +497,12 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h3 className="font-display text-lg mb-2">Rules Snapshot</h3>
+              <h3 className="font-display text-lg mb-2">Level-1 Rules</h3>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>Fiduciary and Principal each pick one of 23 cards.</li>
-                <li>You answer question from the card picked by the other role.</li>
-                <li>Level-2 is intentionally not started yet.</li>
+                <li>Fiduciary and Principal each pick one DPDP principle card.</li>
+                <li>You answer the question from the card picked by the other role.</li>
+                <li>+100 for correct, −50 for incorrect answers.</li>
+                <li>After both answer, host starts Level-2 with Banking &amp; Insurance sector questions.</li>
               </ol>
             </section>
           </aside>
