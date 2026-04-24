@@ -244,6 +244,12 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
   }, [level2, state.fiduciary_card_id, state.principal_card_id, state.status]);
 
   const finishLevel2 = async () => {
+    // Mark both players as completed in session_players
+    await supabase
+      .from("session_players")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("session_id", sessionId);
+
     if (isHost) {
       await supabase
         .from("game_sessions")
@@ -252,6 +258,18 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
     }
     navigate({ to: "/results/$sessionId", params: { sessionId } });
   };
+
+  // Bump current_level to 2 in session_players when this component mounts
+  // so the leaderboard records Level 2 as max_level_reached.
+  useEffect(() => {
+    if (!live.me) return;
+    if (live.me.current_level >= 2) return;
+    void supabase
+      .from("session_players")
+      .update({ current_level: 2 })
+      .eq("id", live.me.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.me?.id]); // run once when me is known
 
   const viewPhase = state.status;
 
@@ -405,37 +423,68 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
             )}
 
             {/* Completion Phase */}
-            {state.status === "completed" && (
-              <div className="rounded-xl border border-accent/40 bg-accent/5 p-5 mb-5">
-                <h2 className="font-display text-xl mb-2">🏆 Level-2 Completed!</h2>
-                <div className="grid sm:grid-cols-2 gap-3 mb-4 text-sm">
-                  <div className="rounded-md border border-border bg-surface p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Your card</div>
-                    <div className="font-medium">{mySelectedCard?.title ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{mySelectedCard?.sector}</div>
+            {state.status === "completed" && (() => {
+              const sorted = live.players.slice().sort((a, b) => b.score - a.score);
+              const [first, second] = sorted;
+              const isTie = first && second && first.score === second.score;
+              const iWon = first?.player_id === user.id && !isTie;
+              return (
+                <div className="rounded-xl border border-accent/40 bg-accent/5 p-5 mb-5">
+                  <h2 className="font-display text-xl mb-3">🏆 Level-2 Completed!</h2>
+
+                  {/* Winner banner */}
+                  {isTie ? (
+                    <div className="rounded-lg border border-[var(--gold)]/40 bg-[var(--gold)]/5 p-3 mb-4 text-center">
+                      <span className="text-lg">⚖️</span>
+                      <p className="font-display text-base font-semibold text-[var(--gold)]">It's a Tie!</p>
+                      <p className="text-xs text-muted-foreground">Both players scored <span className="font-mono font-bold">{first?.score}</span> pts</p>
+                    </div>
+                  ) : (
+                    <div className={`rounded-lg border p-3 mb-4 text-center ${iWon ? "border-[var(--gold)]/40 bg-[var(--gold)]/5" : "border-border bg-surface-2"}`}>
+                      <span className="text-lg">{iWon ? "👑" : "🥈"}</span>
+                      <p className={`font-display text-base font-semibold ${iWon ? "text-[var(--gold)]" : "text-muted-foreground"}`}>
+                        {iWon ? "You Won!" : `${live.profiles[first?.player_id ?? ""]?.display_name ?? "Opponent"} Won`}
+                      </p>
+                      <div className="flex justify-center gap-6 mt-2 text-sm">
+                        {sorted.map((p, i) => (
+                          <div key={p.id} className="text-center">
+                            <div className="text-[10px] text-muted-foreground mb-0.5">{p.player_id === user.id ? "You" : (live.profiles[p.player_id]?.display_name ?? "Opponent")}</div>
+                            <div className={`font-mono font-bold text-lg ${i === 0 ? "text-[var(--gold)]" : ""}`}>{p.score}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid sm:grid-cols-2 gap-3 mb-4 text-sm">
+                    <div className="rounded-md border border-border bg-surface p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Your card</div>
+                      <div className="font-medium">{mySelectedCard?.title ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{mySelectedCard?.sector}</div>
+                    </div>
+                    <div className="rounded-md border border-border bg-surface p-3">
+                      <div className="text-xs text-muted-foreground mb-1">{opponentName}'s card</div>
+                      <div className="font-medium">{opponentSelectedCard?.title ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{opponentSelectedCard?.sector}</div>
+                    </div>
                   </div>
-                  <div className="rounded-md border border-border bg-surface p-3">
-                    <div className="text-xs text-muted-foreground mb-1">{opponentName}'s card</div>
-                    <div className="font-medium">{opponentSelectedCard?.title ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{opponentSelectedCard?.sector}</div>
+                  <div className="flex items-center gap-3 text-sm mb-4">
+                    <span>
+                      Your answer: <strong>{myChoice ?? "—"}</strong>
+                      {myRole === "fiduciary" ? (state.fiduciary_is_correct ? " ✅" : " ❌") : (state.principal_is_correct ? " ✅" : " ❌")}
+                    </span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>Final Score: <strong className="font-mono">{live.me.score}</strong></span>
                   </div>
+                  <button
+                    onClick={() => void finishLevel2()}
+                    className="px-5 py-2.5 rounded-md bg-primary text-primary-foreground font-medium"
+                  >
+                    View Full Learning Recap →
+                  </button>
                 </div>
-                <div className="flex items-center gap-3 text-sm mb-4">
-                  <span>
-                    Your answer: <strong>{myChoice ?? "—"}</strong>
-                    {myRole === "fiduciary" ? (state.fiduciary_is_correct ? " ✅" : " ❌") : (state.principal_is_correct ? " ✅" : " ❌")}
-                  </span>
-                  <span className="text-muted-foreground">·</span>
-                  <span>Final Score: <strong className="font-mono">{live.me.score}</strong></span>
-                </div>
-                <button
-                  onClick={() => void finishLevel2()}
-                  className="px-5 py-2.5 rounded-md bg-primary text-primary-foreground font-medium"
-                >
-                  View Full Learning Recap →
-                </button>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Card Grid — Grouped by DPDP Rule (mirrors Level-1 section structure) */}
             <section>
@@ -493,6 +542,69 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               peerUserId={opponent?.player_id ?? null}
               isInitiator={myRole === "fiduciary"}
             />
+
+            {/* Live Scoreboard */}
+            <section className="rounded-xl border border-border bg-surface p-4">
+              <h3 className="font-display text-lg mb-3">🏆 Live Scoreboard</h3>
+              <div className="space-y-3">
+                {live.players
+                  .slice()
+                  .sort((a, b) => b.score - a.score)
+                  .map((player, i) => {
+                    const isMe = player.player_id === user.id;
+                    const playerName = isMe
+                      ? myName
+                      : live.profiles[player.player_id]?.display_name ?? "Opponent";
+                    const isLeading = i === 0 && live.players.length > 1 && live.players[0]?.score !== live.players[1]?.score;
+                    return (
+                      <div
+                        key={player.id}
+                        className={[
+                          "flex items-center justify-between gap-3 rounded-lg border p-3 transition-all",
+                          isMe ? "border-primary/40 bg-primary/5" : "border-border bg-surface-2",
+                          isLeading ? "outline outline-1 outline-[var(--gold)]/40" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base">{i === 0 ? "👑" : "🥈"}</span>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">
+                              {playerName} {isMe && <span className="text-xs text-muted-foreground">(you)</span>}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              Compliance: {player.compliance_meter}%
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-bold text-xl tabular-nums">{player.score}</div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">pts</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Tie / Leading indicator */}
+              {live.players.length === 2 && (() => {
+                const [p1, p2] = live.players;
+                if (!p1 || !p2) return null;
+                const diff = Math.abs(p1.score - p2.score);
+                if (diff === 0) {
+                  return <p className="text-xs text-center text-muted-foreground mt-2">⚖️ It's a tie!</p>;
+                }
+                const leader = p1.score > p2.score ? p1 : p2;
+                const leaderName = leader.player_id === user.id
+                  ? myName
+                  : live.profiles[leader.player_id]?.display_name ?? "Opponent";
+                return (
+                  <p className="text-xs text-center text-muted-foreground mt-2">
+                    <span className="text-[var(--gold)] font-medium">{leaderName}</span> leads by <span className="font-mono">{diff}</span> pts
+                  </p>
+                );
+              })()}
+            </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
               <h3 className="font-display text-lg mb-3">Round State</h3>

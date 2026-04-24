@@ -7,6 +7,7 @@ import { RoleBadge } from "@/components/ui/Badges";
 import { toast } from "sonner";
 import { SCENARIOS } from "@/data/scenarios";
 import { getLevel1CardById } from "@/data/level1Principles";
+import { getLevel2CardById } from "@/data/level2BankingInsurance";
 
 export const Route = createFileRoute("/results/$sessionId")({
   component: ResultsPage,
@@ -39,10 +40,33 @@ function ResultsPage() {
   const [answers, setAnswers] = useState<AnswerRow[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionMode, setSessionMode] = useState<"solo" | "multiplayer">("solo");
+  const [sessionReachedLevel2, setSessionReachedLevel2] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
+      // Load session metadata to determine mode & levels reached
+      const { data: sessionData } = await supabase
+        .from("game_sessions")
+        .select("mode, status")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (sessionData) {
+        setSessionMode((sessionData as { mode: "solo" | "multiplayer" }).mode);
+        // If the session was promoted to level2 or completed via level2, mark it
+        const s = (sessionData as { status: string }).status;
+        if (s === "level2" || s === "completed") {
+          // Check level2_sessions to see if this session played level 2
+          const { data: l2 } = await supabase
+            .from("level2_sessions")
+            .select("id, status")
+            .eq("session_id", sessionId)
+            .maybeSingle();
+          if (l2) setSessionReachedLevel2(true);
+        }
+      }
+
       const { data: sp } = await supabase
         .from("session_players")
         .select("*")
@@ -72,13 +96,18 @@ function ResultsPage() {
   const submit = useCallback(async (showToast = true) => {
     if (submitted) return;
     if (!user || !me) return;
+    // For multiplayer, current_level on session_players may stay at 1 even if Level-2 was played,
+    // so we use the sessionReachedLevel2 flag to report the correct max level reached.
+    const maxLevel = sessionMode === "multiplayer" && sessionReachedLevel2
+      ? 2
+      : me.current_level;
     try {
       const { error } = await supabase.from("leaderboard").insert({
         player_id: user.id,
         display_name: profile?.display_name ?? "Agent",
         role: me.role,
         final_score: me.score,
-        max_level_reached: me.current_level,
+        max_level_reached: maxLevel,
         compliance_pct: me.compliance_meter,
         outcome,
         session_id: sessionId,
@@ -89,12 +118,12 @@ function ResultsPage() {
     } catch (err: unknown) {
       if (showToast) toast.error(err instanceof Error ? err.message : "Failed to submit");
     }
-  }, [submitted, user, me, profile?.display_name, sessionId, outcome]);
+  }, [submitted, user, me, profile?.display_name, sessionId, outcome, sessionMode, sessionReachedLevel2]);
 
   useEffect(() => {
     if (loading || !user || !me || submitted) return;
     void submit(false);
-  }, [loading, user, me, submitted, submit]);
+  }, [loading, user, me, submitted, submit, sessionReachedLevel2]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading recap…</div>;
   if (!me || !user) {
@@ -120,7 +149,10 @@ function ResultsPage() {
   const answerReview = answers.map((answer) => {
     const scenario = SCENARIOS.find((s) => s.id === answer.scenario_id);
     const level1Card = getLevel1CardById(answer.scenario_id);
+    const level2Card = getLevel2CardById(answer.scenario_id);
+
     if (!scenario) {
+      // Level-1 multiplayer card
       if (level1Card) {
         const yourChoiceLabel = answer.choice as "A" | "B" | "C" | "D";
         const correctChoiceLabel = level1Card.correctChoice;
@@ -132,6 +164,22 @@ function ResultsPage() {
           yourChoiceText: level1Card.choices[yourChoiceLabel],
           correctChoiceLabel,
           correctChoiceText: level1Card.choices[correctChoiceLabel],
+          isCorrect: answer.is_correct,
+        };
+      }
+
+      // Level-2 multiplayer Banking & Insurance card
+      if (level2Card) {
+        const yourChoiceLabel = answer.choice as "A" | "B" | "C" | "D";
+        const correctChoiceLabel = level2Card.correctChoice;
+        return {
+          id: answer.id,
+          title: `${level2Card.title} (${level2Card.sector} — ${level2Card.section})`,
+          level: answer.level,
+          yourChoiceLabel,
+          yourChoiceText: level2Card.choices[yourChoiceLabel],
+          correctChoiceLabel,
+          correctChoiceText: level2Card.choices[correctChoiceLabel],
           isCorrect: answer.is_correct,
         };
       }
@@ -168,7 +216,17 @@ function ResultsPage() {
       <AppHeader />
       <main className="max-w-5xl mx-auto px-4 pt-10 pb-16">
         <h1 className="font-display text-3xl mb-1">Learning Recap</h1>
-        <p className="text-muted-foreground mb-6">Outcome: <span className="font-medium text-foreground">{outcome === "completed" ? "✅ Completed" : outcome === "bankrupt" ? "💀 Bankrupt" : "⏰ Timeout"}</span></p>
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <p className="text-muted-foreground">Outcome: <span className="font-medium text-foreground">{outcome === "completed" ? "✅ Completed" : outcome === "bankrupt" ? "💀 Bankrupt" : "⏰ Timeout"}</span></p>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${sessionMode === "multiplayer" ? "bg-[var(--principal)]/10 text-[var(--principal)] border-[var(--principal)]/30" : "bg-[var(--fiduciary)]/10 text-[var(--fiduciary)] border-[var(--fiduciary)]/30"}`}>
+            {sessionMode === "multiplayer" ? "🤝 Multiplayer" : "🎮 Solo"}
+          </span>
+          {sessionReachedLevel2 && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium border bg-[var(--gold)]/10 text-[var(--gold)] border-[var(--gold)]/30">
+              🏦 Level-2 Reached
+            </span>
+          )}
+        </div>
 
         <div className="grid md:grid-cols-2 gap-5">
           {/* Score summary */}

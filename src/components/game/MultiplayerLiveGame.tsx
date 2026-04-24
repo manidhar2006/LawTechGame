@@ -474,6 +474,69 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
               isInitiator={myRole === "fiduciary"}
             />
 
+            {/* Live Scoreboard */}
+            <section className="rounded-xl border border-border bg-surface p-4">
+              <h3 className="font-display text-lg mb-3">🏆 Live Scoreboard</h3>
+              <div className="space-y-3">
+                {live.players
+                  .slice()
+                  .sort((a, b) => b.score - a.score)
+                  .map((player, i) => {
+                    const isMe = player.player_id === user.id;
+                    const playerName = isMe
+                      ? myName
+                      : live.profiles[player.player_id]?.display_name ?? "Opponent";
+                    const scores = live.players.map((p) => p.score).sort((a, b) => b - a);
+                    const isLeading = i === 0 && live.players.length > 1 && scores[0] !== scores[1];
+                    return (
+                      <div
+                        key={player.id}
+                        className={[
+                          "flex items-center justify-between gap-3 rounded-lg border p-3 transition-all",
+                          isMe ? "border-primary/40 bg-primary/5" : "border-border bg-surface-2",
+                          isLeading ? "outline outline-1 outline-[var(--gold)]/40" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base">{i === 0 ? "👑" : "🥈"}</span>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">
+                              {playerName} {isMe && <span className="text-xs text-muted-foreground">(you)</span>}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              Compliance: {player.compliance_meter}%
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-bold text-xl tabular-nums">{player.score}</div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">pts</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              {live.players.length === 2 && (() => {
+                const [p1, p2] = live.players;
+                if (!p1 || !p2) return null;
+                const diff = Math.abs(p1.score - p2.score);
+                if (diff === 0) {
+                  return <p className="text-xs text-center text-muted-foreground mt-2">⚖️ It's a tie!</p>;
+                }
+                const leader = p1.score > p2.score ? p1 : p2;
+                const leaderName = leader.player_id === user.id
+                  ? myName
+                  : live.profiles[leader.player_id]?.display_name ?? "Opponent";
+                return (
+                  <p className="text-xs text-center text-muted-foreground mt-2">
+                    <span className="text-[var(--gold)] font-medium">{leaderName}</span> leads by <span className="font-mono">{diff}</span> pts
+                  </p>
+                );
+              })()}
+            </section>
+
             <section className="rounded-xl border border-border bg-surface p-4">
               <h3 className="font-display text-lg mb-3">Round State</h3>
               <ul className="space-y-2 text-sm">
