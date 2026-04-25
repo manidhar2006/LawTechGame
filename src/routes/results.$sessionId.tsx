@@ -54,17 +54,14 @@ function ResultsPage() {
         .maybeSingle();
       if (sessionData) {
         setSessionMode((sessionData as { mode: "solo" | "multiplayer" }).mode);
-        // If the session was promoted to level2 or completed via level2, mark it
-        const s = (sessionData as { status: string }).status;
-        if (s === "level2" || s === "completed") {
-          // Check level2_sessions to see if this session played level 2
-          const { data: l2 } = await supabase
-            .from("level2_sessions")
-            .select("id, status")
-            .eq("session_id", sessionId)
-            .maybeSingle();
-          if (l2) setSessionReachedLevel2(true);
-        }
+
+        // Check level2_sessions directly to see if this session reached Level-2.
+        const { data: l2 } = await supabase
+          .from("level2_sessions")
+          .select("id")
+          .eq("session_id", sessionId)
+          .maybeSingle();
+        if (l2) setSessionReachedLevel2(true);
       }
 
       const { data: sp } = await supabase

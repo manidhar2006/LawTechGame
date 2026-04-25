@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGameSession } from "@/hooks/useGameSession";
 import {
-  getLevel2CardById,
   LEVEL2_BANKING_INSURANCE_CARDS,
   type Level2Choice,
   type Level2Card,
 } from "@/data/level2BankingInsurance";
+import {
+  LEVEL1_PRINCIPLE_CARDS,
+  type Level1PrincipleCard,
+} from "@/data/level1Principles";
 import { LevelBadge, RoleBadge } from "@/components/ui/Badges";
 import { VoiceRoomPanel } from "@/components/game/VoiceRoomPanel";
 import { toast } from "sonner";
@@ -20,6 +23,8 @@ interface Props {
 
 type Level2SessionRow = Tables<"level2_sessions">;
 
+const LEVEL2_QUESTIONS_PER_RULE = 7;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -29,6 +34,55 @@ const SECTOR_COLOR: Record<string, string> = {
   Insurance: "var(--principal)",
   "Cross-Sector": "var(--gold)",
 };
+
+function convertLevel1CardToLevel2Card(
+  card: Level1PrincipleCard,
+  sector: Level2Card["sector"],
+  suffix: string,
+): Level2Card {
+  return {
+    id: `L2-${card.id}-${suffix}`,
+    title: card.title,
+    section: card.section,
+    sector,
+    summary: card.summary,
+    question: card.question,
+    choices: card.choices,
+    correctChoice: card.correctChoice,
+    explanation: card.explanation,
+  };
+}
+
+function buildLevel2CardsByRule(): Record<string, Level2Card[]> {
+  const groupedLevel2 = LEVEL2_BANKING_INSURANCE_CARDS.reduce<Record<string, Level2Card[]>>((acc, card) => {
+    if (!acc[card.section]) acc[card.section] = [];
+    acc[card.section].push(card);
+    return acc;
+  }, {});
+
+  const groupedLevel1 = LEVEL1_PRINCIPLE_CARDS.reduce<Record<string, Level1PrincipleCard[]>>((acc, card) => {
+    if (!acc[card.section]) acc[card.section] = [];
+    acc[card.section].push(card);
+    return acc;
+  }, {});
+
+  return Object.fromEntries(
+    Object.entries(groupedLevel2)
+      .map(([rule, cards]) => {
+        const missingCount = Math.max(0, LEVEL2_QUESTIONS_PER_RULE - cards.length);
+        const fallbackCards = (groupedLevel1[rule] ?? [])
+          .filter((card) => !cards.some((existing) => existing.title === card.title || existing.question === card.question))
+          .slice(0, missingCount)
+          .map((card, index) => {
+            const sector = cards[index % cards.length]?.sector ?? "Cross-Sector";
+            return convertLevel1CardToLevel2Card(card, sector, `${rule}-${index}`);
+          });
+
+        return [rule, [...cards.slice(0, LEVEL2_QUESTIONS_PER_RULE), ...fallbackCards].slice(0, LEVEL2_QUESTIONS_PER_RULE)];
+      })
+      .sort(([ruleA], [ruleB]) => parseInt(ruleA.replace("Rule ", "")) - parseInt(ruleB.replace("Rule ", ""))),
+  );
+}
 
 function useLevel2Session(sessionId: string | undefined, currentUserId: string | undefined) {
   const [state, setState] = useState<Level2SessionRow | null>(null);
@@ -108,8 +162,95 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
   const { user, profile } = useAuth();
   const live = useGameSession(sessionId, user?.id);
   const level2 = useLevel2Session(sessionId, user?.id);
-  const completionSynced = useRef(false);
+  const state = level2.state;
   const answeringSynced = useRef(false);
+
+  const cardsByRule = useMemo(
+    () => buildLevel2CardsByRule(),
+    [],
+  );
+  const sortedRules = useMemo(
+    () => Object.keys(cardsByRule).sort((a, b) => parseInt(a.replace("Rule ", "")) - parseInt(b.replace("Rule ", ""))),
+    [cardsByRule],
+  );
+  const myRole = live.me?.role ?? "fiduciary";
+  const mySelectedRule = state
+    ? myRole === "fiduciary"
+      ? state.fiduciary_selected_rule
+      : state.principal_selected_rule
+    : null;
+  const opponentSelectedRule = state
+    ? myRole === "fiduciary"
+      ? state.principal_selected_rule
+      : state.fiduciary_selected_rule
+    : null;
+  const opponentRuleCards = opponentSelectedRule ? cardsByRule[opponentSelectedRule] ?? [] : [];
+  const currentCardIndex = state?.current_card_index ?? 0;
+  const currentStep = opponentSelectedRule ? currentCardIndex + 1 : 0;
+  const nextQuestionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex + 1] ?? null : null;
+  const canAdvanceQuestion = state?.status === "answering" && !!state.fiduciary_choice && !!state.principal_choice;
+  const myChoice = state
+    ? myRole === "fiduciary"
+      ? state.fiduciary_choice
+      : state.principal_choice
+    : null;
+  const opponentChoice = state
+    ? myRole === "fiduciary"
+      ? state.principal_choice
+      : state.fiduciary_choice
+    : null;
+  const questionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex] ?? null : null;
+
+  useEffect(() => {
+    if (!state) {
+      answeringSynced.current = false;
+      return;
+    }
+
+    const bothRulesChosen = !!state.fiduciary_selected_rule && !!state.principal_selected_rule;
+    if (!bothRulesChosen) {
+      answeringSynced.current = false;
+      if (state.status !== "selecting") {
+        void level2.updateState({ status: "selecting" }).catch(() => {
+          // ignore transient sync errors
+        });
+      }
+      return;
+    }
+
+    const fiduciaryCards = state.fiduciary_selected_rule ? cardsByRule[state.fiduciary_selected_rule] ?? [] : [];
+    const principalCards = state.principal_selected_rule ? cardsByRule[state.principal_selected_rule] ?? [] : [];
+    const hasCurrentQuestion = !!fiduciaryCards[currentCardIndex] && !!principalCards[currentCardIndex];
+
+    if (!hasCurrentQuestion) {
+      if (state.status !== "completed") {
+        void level2.updateState({ status: "completed" }).catch(() => {
+          // ignore transient sync errors
+        });
+      }
+      answeringSynced.current = false;
+      return;
+    }
+
+    if (state.status !== "answering" && !answeringSynced.current) {
+      answeringSynced.current = true;
+      void level2.updateState({ status: "answering" }).catch(() => {
+        answeringSynced.current = false;
+      });
+    }
+  }, [cardsByRule, currentCardIndex, level2, state, state?.fiduciary_selected_rule, state?.principal_selected_rule, state?.status]);
+
+  // Bump current_level to 2 in session_players when this component mounts
+  // so the leaderboard records Level 2 as max_level_reached.
+  useEffect(() => {
+    if (!live.me) return;
+    if (live.me.current_level >= 2) return;
+    void supabase
+      .from("session_players")
+      .update({ current_level: 2 })
+      .eq("id", live.me.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.me?.id]); // run once when me is known
 
   if (live.loading || level2.loading || !live.session || !live.me || !user) {
     return (
@@ -134,7 +275,7 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
     );
   }
 
-  if (!level2.state) {
+  if (!state) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
         Preparing Level-2 state…
@@ -142,33 +283,34 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
     );
   }
 
-  const state = level2.state;
-  const myRole = live.me.role;
-  const myCardId = myRole === "fiduciary" ? state.fiduciary_card_id : state.principal_card_id;
-  const opponentCardId = myRole === "fiduciary" ? state.principal_card_id : state.fiduciary_card_id;
-  const myChoice = myRole === "fiduciary" ? state.fiduciary_choice : state.principal_choice;
-  const opponentChoice = myRole === "fiduciary" ? state.principal_choice : state.fiduciary_choice;
-
-  const mySelectedCard = getLevel2CardById(myCardId);
-  const opponentSelectedCard = getLevel2CardById(opponentCardId);
-  const questionCard = getLevel2CardById(opponentCardId);
-
-  const handlePickCard = async (cardId: string) => {
-    if (state.status !== "selecting") return;
-    if (myCardId) return;
-
-    const patch: Partial<Level2SessionRow> =
-      myRole === "fiduciary" ? { fiduciary_card_id: cardId } : { principal_card_id: cardId };
-
-    const fidCard = myRole === "fiduciary" ? cardId : state.fiduciary_card_id;
-    const priCard = myRole === "principal" ? cardId : state.principal_card_id;
-    if (fidCard && priCard) patch.status = "answering";
+  const handleSelectRule = async (rule: string) => {
+    if (!cardsByRule[rule]?.length) return;
 
     try {
-      await level2.updateState(patch);
-      toast.success("Card locked.");
+      const patch: Partial<Level2SessionRow> =
+        myRole === "fiduciary"
+          ? {
+              fiduciary_selected_rule: rule,
+              fiduciary_card_id: null,
+              fiduciary_choice: null,
+              fiduciary_is_correct: null,
+            }
+          : {
+              principal_selected_rule: rule,
+              principal_card_id: null,
+              principal_choice: null,
+              principal_is_correct: null,
+            };
+
+      await level2.updateState({
+        ...patch,
+        current_card_index: 0,
+        status: "selecting",
+      });
+      answeringSynced.current = false;
+      toast.success(`${rule} selected.`);
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not lock card");
+      toast.error(error instanceof Error ? error.message : "Could not start rule");
     }
   };
 
@@ -186,10 +328,6 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
       myRole === "fiduciary"
         ? { fiduciary_choice: choice, fiduciary_is_correct: isCorrect }
         : { principal_choice: choice, principal_is_correct: isCorrect };
-
-    if (opponentChoice) {
-      choicePatch.status = "completed";
-    }
 
     try {
       await Promise.all([
@@ -215,33 +353,26 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
     }
   };
 
-  // Sync status to "completed" when both have answered
-  useEffect(() => {
-    if (state.status === "completed") {
-      completionSynced.current = false;
-      return;
-    }
-    if (!state.fiduciary_choice || !state.principal_choice) return;
-    if (completionSynced.current) return;
-    completionSynced.current = true;
-    void level2.updateState({ status: "completed" }).catch(() => {
-      completionSynced.current = false;
-    });
-  }, [level2, state.fiduciary_choice, state.principal_choice, state.status]);
+  const handleNextQuestion = async () => {
+    if (!canAdvanceQuestion || !state) return;
 
-  // Sync status to "answering" when both picked cards
-  useEffect(() => {
-    if (state.status !== "selecting") {
+    const nextCardIndex = currentCardIndex + 1;
+    const hasNextQuestion = !!nextQuestionCard;
+
+    try {
+      await level2.updateState({
+        current_card_index: nextCardIndex,
+        fiduciary_choice: null,
+        principal_choice: null,
+        fiduciary_is_correct: null,
+        principal_is_correct: null,
+        status: hasNextQuestion ? "answering" : "completed",
+      });
       answeringSynced.current = false;
-      return;
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not advance to the next question");
     }
-    if (!state.fiduciary_card_id || !state.principal_card_id) return;
-    if (answeringSynced.current) return;
-    answeringSynced.current = true;
-    void level2.updateState({ status: "answering" }).catch(() => {
-      answeringSynced.current = false;
-    });
-  }, [level2, state.fiduciary_card_id, state.principal_card_id, state.status]);
+  };
 
   const finishLevel2 = async () => {
     // Mark both players as completed in session_players
@@ -259,33 +390,7 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
     navigate({ to: "/results/$sessionId", params: { sessionId } });
   };
 
-  // Bump current_level to 2 in session_players when this component mounts
-  // so the leaderboard records Level 2 as max_level_reached.
-  useEffect(() => {
-    if (!live.me) return;
-    if (live.me.current_level >= 2) return;
-    void supabase
-      .from("session_players")
-      .update({ current_level: 2 })
-      .eq("id", live.me.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live.me?.id]); // run once when me is known
-
   const viewPhase = state.status;
-
-  // Group cards by DPDP Rule (section) — mirrors Level-1's principle structure
-  const cardsByRule = LEVEL2_BANKING_INSURANCE_CARDS.reduce<Record<string, typeof LEVEL2_BANKING_INSURANCE_CARDS>>(
-    (acc, card) => {
-      if (!acc[card.section]) acc[card.section] = [];
-      acc[card.section].push(card);
-      return acc;
-    },
-    {},
-  );
-  // Sort rules numerically: "Rule 1" < "Rule 2" … < "Rule 23"
-  const sortedRules = Object.keys(cardsByRule).sort(
-    (a, b) => parseInt(a.replace("Rule ", "")) - parseInt(b.replace("Rule ", "")),
-  );
 
   return (
     <div className="min-h-screen pb-12">
@@ -344,27 +449,85 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               </div>
             </div>
 
-            <h1 className="font-display text-2xl mb-1">Sector Compliance Duel</h1>
+            <h1 className="font-display text-2xl mb-1">Sector Rule Challenge</h1>
             <p className="text-sm text-muted-foreground mb-5">
-              Both players pick one sector card from Banking, Insurance, or Cross-Sector.
-              You answer the MCQ from your opponent's selected card. +120 for correct, −60 for incorrect.
+              Each player selects a DPDP rule independently. The questions appear one by one from the other player's selected rule.
             </p>
 
-            {state.status === "selecting" && (
+            {!mySelectedRule && (
               <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
-                {myCardId
-                  ? "✅ Card locked. Waiting for your opponent to pick their card."
-                  : `Pick one of the ${LEVEL2_BANKING_INSURANCE_CARDS.length} sector cards below.`}
+                Choose your rule first. Your opponent will answer the questions from the rule you select.
               </div>
             )}
 
-            {/* Question Phase */}
-            {state.status !== "selecting" && questionCard && (
+            {mySelectedRule && state.status === "selecting" && (
+              <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
+                Waiting for {opponentName} to select their rule. After that, questions from {mySelectedRule} will appear one by one for the other player.
+              </div>
+            )}
+
+            {!mySelectedRule && (
+              <section className="mb-5">
+                <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                  <h3 className="text-sm font-medium">Pick Your Rule</h3>
+                  <span className="text-xs text-muted-foreground font-mono">{mySelectedRule ?? "Not selected"}</span>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {sortedRules.map((rule) => {
+                    const ruleCardsCount = cardsByRule[rule]?.length ?? 0;
+                    const ruleNum = parseInt(rule.replace("Rule ", ""));
+                    const accent = ruleNum % 3 === 0
+                      ? "var(--gold)"
+                      : ruleNum % 3 === 1
+                      ? "var(--fiduciary)"
+                      : "var(--principal)";
+                    const isSelected = mySelectedRule === rule;
+
+                    return (
+                      <button
+                        key={rule}
+                        onClick={() => void handleSelectRule(rule)}
+                        disabled={!!mySelectedRule}
+                        className={[
+                          "rounded-lg border text-left p-3 bg-surface transition",
+                          !mySelectedRule && "hover:border-primary/50",
+                          isSelected && "border-accent bg-accent/10",
+                          !isSelected && "border-border",
+                          mySelectedRule && !isSelected && "opacity-70",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span
+                            className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                            style={{
+                              background: `color-mix(in srgb, ${accent} 12%, transparent)`,
+                              color: accent,
+                              border: `1px solid color-mix(in srgb, ${accent} 25%, transparent)`,
+                            }}
+                          >
+                            {rule}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{ruleCardsCount} cards</span>
+                        </div>
+                        <p className="font-medium text-sm leading-snug">{isSelected ? "Your rule" : "Start this rule"}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          The card you lock in this rule becomes the question for the other player.
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {questionCard && state.status === "answering" && (
               <article className="rounded-xl border border-border bg-surface p-5 mb-5">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-2">
-                  <span className="font-semibold text-[11px] text-foreground/70">
-                    {questionCard.section}
-                  </span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-2 flex-wrap">
+                  <span className="font-semibold text-[11px] text-foreground/70">{opponentSelectedRule ?? "Selected rule"}</span>
+                  <span>·</span>
+                  <span>{currentStep} / {opponentRuleCards.length} questions</span>
                   <span>·</span>
                   <span
                     className="px-2 py-0.5 rounded-full text-[11px] font-medium"
@@ -376,8 +539,6 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
                   >
                     {questionCard.sector}
                   </span>
-                  <span>·</span>
-                  <span>Selected by {opponentName}</span>
                 </div>
                 <h2 className="font-display text-xl mb-1">{questionCard.title}</h2>
                 <p className="text-sm text-muted-foreground mb-3">{questionCard.summary}</p>
@@ -419,10 +580,24 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
                     <p className="text-muted-foreground">{questionCard.explanation}</p>
                   </div>
                 )}
+
+                {canAdvanceQuestion && (
+                  <div className="mt-4 flex items-center justify-between gap-3 flex-wrap rounded-md border border-border bg-surface-2/40 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Both players answered. Click next to load {nextQuestionCard ? "the next question" : "the final result"}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleNextQuestion()}
+                      className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+                    >
+                      {nextQuestionCard ? "Next Question →" : "Finish Level-2 →"}
+                    </button>
+                  </div>
+                )}
               </article>
             )}
 
-            {/* Completion Phase */}
             {state.status === "completed" && (() => {
               const sorted = live.players.slice().sort((a, b) => b.score - a.score);
               const [first, second] = sorted;
@@ -430,9 +605,16 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               const iWon = first?.player_id === user.id && !isTie;
               return (
                 <div className="rounded-xl border border-accent/40 bg-accent/5 p-5 mb-5">
-                  <h2 className="font-display text-xl mb-3">🏆 Level-2 Completed!</h2>
+                  <h2 className="font-display text-xl mb-3">🏆 Rule Completed!</h2>
 
-                  {/* Winner banner */}
+                  {(mySelectedRule || opponentSelectedRule) && (
+                    <div className="rounded-lg border border-border bg-surface-2 p-3 mb-4">
+                      <div className="text-xs text-muted-foreground mb-1">Completed rules</div>
+                      <div className="font-medium">You: {mySelectedRule ?? "—"}</div>
+                      <div className="font-medium">Opponent: {opponentSelectedRule ?? "—"}</div>
+                    </div>
+                  )}
+
                   {isTie ? (
                     <div className="rounded-lg border border-[var(--gold)]/40 bg-[var(--gold)]/5 p-3 mb-4 text-center">
                       <span className="text-lg">⚖️</span>
@@ -456,22 +638,9 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
                     </div>
                   )}
 
-                  <div className="grid sm:grid-cols-2 gap-3 mb-4 text-sm">
-                    <div className="rounded-md border border-border bg-surface p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Your card</div>
-                      <div className="font-medium">{mySelectedCard?.title ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{mySelectedCard?.sector}</div>
-                    </div>
-                    <div className="rounded-md border border-border bg-surface p-3">
-                      <div className="text-xs text-muted-foreground mb-1">{opponentName}'s card</div>
-                      <div className="font-medium">{opponentSelectedCard?.title ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{opponentSelectedCard?.sector}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm mb-4">
+                  <div className="flex items-center gap-3 text-sm mb-4 flex-wrap">
                     <span>
-                      Your answer: <strong>{myChoice ?? "—"}</strong>
-                      {myRole === "fiduciary" ? (state.fiduciary_is_correct ? " ✅" : " ❌") : (state.principal_is_correct ? " ✅" : " ❌")}
+                      Rule round finished for <strong>{mySelectedRule ?? "this rule"}</strong>
                     </span>
                     <span className="text-muted-foreground">·</span>
                     <span>Final Score: <strong className="font-mono">{live.me.score}</strong></span>
@@ -486,52 +655,24 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               );
             })()}
 
-            {/* Card Grid — Grouped by DPDP Rule (mirrors Level-1 section structure) */}
             <section>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium">
-                  Banking &amp; Insurance Cards by DPDP Rule ({LEVEL2_BANKING_INSURANCE_CARDS.length} cards across {sortedRules.length} rules)
-                </h3>
+              <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                <h3 className="text-sm font-medium">Rule State</h3>
                 <span className="text-xs text-muted-foreground font-mono">
-                  {myCardId ? `Locked: ${myCardId}` : "Not locked"}
+                  {mySelectedRule ? `You: ${mySelectedRule}` : "Pick your rule"}
                 </span>
               </div>
 
-              {sortedRules.map((rule) => {
-                const ruleCards = cardsByRule[rule];
-                const ruleNum = parseInt(rule.replace("Rule ", ""));
-                // Alternate color accent per rule group for visual separation
-                const accent = ruleNum % 3 === 0
-                  ? "var(--gold)"
-                  : ruleNum % 3 === 1
-                  ? "var(--fiduciary)"
-                  : "var(--principal)";
-
-                return (
-                  <div key={rule} className="mb-6">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span
-                        className="text-xs font-bold px-2.5 py-0.5 rounded-full"
-                        style={{
-                          background: `color-mix(in srgb, ${accent} 12%, transparent)`,
-                          color: accent,
-                          border: `1px solid color-mix(in srgb, ${accent} 25%, transparent)`,
-                        }}
-                      >
-                        {rule}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {ruleCards.length} card{ruleCards.length !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {ruleCards.map((card) =>
-                        renderCard(card, myCardId, opponentCardId, state, handlePickCard)
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Your rule</div>
+                  <div className="font-medium">{mySelectedRule ?? "Not selected"}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Opponent rule</div>
+                  <div className="font-medium">{opponentSelectedRule ?? "Not selected"}</div>
+                </div>
+              </div>
             </section>
           </section>
 
@@ -607,15 +748,21 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
             </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h3 className="font-display text-lg mb-3">Round State</h3>
+              <h3 className="font-display text-lg mb-3">Rule State</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span>{myName} card</span>
-                  <span className="font-mono text-xs">{mySelectedCard?.id ?? "—"}</span>
+                  <span>Your rule</span>
+                  <span className="font-mono text-xs">{mySelectedRule ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>{opponentName} card</span>
-                  <span className="font-mono text-xs">{opponentSelectedCard?.id ?? "—"}</span>
+                  <span>Opponent rule</span>
+                  <span className="font-mono text-xs">{opponentSelectedRule ?? "—"}</span>
+                </li>
+                <li className="flex items-center justify-between gap-3">
+                  <span>Progress</span>
+                  <span className="font-mono text-xs">
+                    {mySelectedRule && opponentSelectedRule ? `${currentStep} question${currentStep === 1 ? "" : "s"}` : "waiting"}
+                  </span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
                   <span>{myName} answer</span>
@@ -629,12 +776,13 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
             </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h3 className="font-display text-lg mb-2">Level-2 Rules</h3>
+              <h3 className="font-display text-lg mb-2">How Level-2 Works</h3>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>Both players pick one Banking, Insurance, or Cross-Sector card.</li>
-                <li>You answer the MCQ from the card your opponent selected.</li>
+                <li>Each player selects a DPDP rule independently.</li>
+                <li>Then the cards from the other player's rule appear one by one.</li>
+                <li>You answer the questions from the opponent's selected rule.</li>
                 <li>+120 for correct, −60 for incorrect answers.</li>
-                <li>Questions are based on real DPDP Rules applied to Finance sector scenarios.</li>
+                <li>When the rule queues end, the Level-2 round ends.</li>
               </ol>
             </section>
 
@@ -667,58 +815,4 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
   );
 }
 
-// ── Helper: render a single card tile ────────────────────────────────────────
-function renderCard(
-  card: Level2Card,
-  myCardId: string | null | undefined,
-  opponentCardId: string | null | undefined,
-  state: { status: string },
-  handlePickCard: (id: string) => Promise<void>,
-) {
-  const selectedByMe = myCardId === card.id;
-  const selectedByOther = opponentCardId === card.id;
-  const isDisabled = state.status !== "selecting" || !!myCardId;
-  const sectorColor = SECTOR_COLOR[card.sector] ?? "var(--primary)";
-
-  return (
-    <button
-      key={card.id}
-      disabled={isDisabled}
-      onClick={() => void handlePickCard(card.id)}
-      className={[
-        "rounded-lg border text-left p-3 bg-surface transition",
-        !isDisabled && "hover:border-primary/50",
-        selectedByMe && "border-accent bg-accent/10",
-        selectedByOther && "border-[var(--principal)]/45",
-        !selectedByMe && !selectedByOther && "border-border",
-        isDisabled && !selectedByMe && "opacity-80",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="font-mono text-xs text-muted-foreground">{card.id}</span>
-        {/* Sector badge */}
-        <span
-          className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-          style={{
-            background: `color-mix(in srgb, ${sectorColor} 12%, transparent)`,
-            color: sectorColor,
-            border: `1px solid color-mix(in srgb, ${sectorColor} 25%, transparent)`,
-          }}
-        >
-          {card.sector}
-        </span>
-      </div>
-      {/* Section (Rule) */}
-      <div className="text-[10px] text-muted-foreground/70 font-mono mb-0.5">{card.section}</div>
-      <p className="font-medium text-sm leading-snug">{card.title}</p>
-      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{card.summary}</p>
-      {selectedByMe && <p className="text-[11px] text-accent mt-2">✓ Selected by you</p>}
-      {selectedByOther && (
-        <p className="text-[11px] text-[var(--principal)] mt-2">Selected by opponent</p>
-      )}
-    </button>
-  );
-}
 

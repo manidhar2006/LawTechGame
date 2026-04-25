@@ -65,6 +65,8 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
   const [channelReady, setChannelReady] = useState(false);
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [micPermission, setMicPermission] = useState<PermissionState | "unsupported">("unsupported");
+  const isEmbedded = typeof window !== "undefined" && window.top !== window.self;
 
   const statusLabel = useMemo(() => {
     if (status === "connected") return "Connected";
@@ -176,6 +178,18 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
     try {
       setStatus("requesting");
       setErrorText(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("error");
+        setErrorText("Microphone access is unavailable in this browser.");
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        setStatus("error");
+        setErrorText("Microphone access requires a secure origin (https or localhost).");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       stream.getAudioTracks().forEach((track) => {
@@ -183,9 +197,22 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
       });
       setJoined(true);
       setStatus("connecting");
-    } catch {
+    } catch (error: unknown) {
+      const name =
+        typeof error === "object" && error !== null && "name" in error
+          ? String((error as { name?: unknown }).name)
+          : "";
+
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setErrorText("Microphone permission is blocked. Allow mic access in browser site settings and try Join call again.");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setErrorText("No microphone was found. Connect a mic and try again.");
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setErrorText("Microphone is busy in another app. Close other apps using the mic and retry.");
+      } else {
+        setErrorText("Unable to access microphone. Check browser permissions and try again.");
+      }
       setStatus("error");
-      setErrorText("Microphone permission is required for the voice room.");
     }
   }, [joined, muted]);
 
@@ -263,11 +290,6 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
   }, [isInitiator, joined, peerUserId, startOffer]);
 
   useEffect(() => {
-    if (!peerUserId || joined) return;
-    void joinVoiceRoom();
-  }, [joinVoiceRoom, joined, peerUserId]);
-
-  useEffect(() => {
     if (!localStreamRef.current) return;
     localStreamRef.current.getAudioTracks().forEach((track) => {
       track.enabled = !muted;
@@ -283,6 +305,32 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
     remoteAudioRef.current.muted = speakerMuted;
     remoteAudioRef.current.volume = speakerMuted ? 0 : 1;
   }, [speakerMuted]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.permissions?.query) return;
+
+    let cancelled = false;
+
+    const queryMicPermission = async () => {
+      try {
+        const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (cancelled) return;
+        setMicPermission(result.state);
+
+        result.onchange = () => {
+          setMicPermission(result.state);
+        };
+      } catch {
+        if (!cancelled) setMicPermission("unsupported");
+      }
+    };
+
+    void queryMicPermission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -378,6 +426,20 @@ export function VoiceRoomPanel({ sessionId, currentUserId, peerUserId, isInitiat
           Reconnect
         </button>
       </div>
+
+      {(isEmbedded || micPermission === "denied") && (
+        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          {isEmbedded
+            ? "This app is running inside an embedded frame, and the browser may block microphone prompts there. Open the app in a top-level tab to request mic access."
+            : "Microphone access is currently blocked in this browser for this site. Open site settings and allow microphone access, then click Join call again."}
+        </div>
+      )}
+
+      {micPermission === "prompt" && !errorText && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Click Join call and your browser should show the microphone permission prompt.
+        </p>
+      )}
 
       {!peerUserId && (
         <p className="mt-3 text-xs text-muted-foreground">

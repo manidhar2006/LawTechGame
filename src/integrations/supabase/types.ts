@@ -144,39 +144,48 @@ export type Database = {
       level1_sessions: {
         Row: {
           created_at: string
+          current_card_index: number
           fiduciary_card_id: string | null
           fiduciary_choice: string | null
           fiduciary_is_correct: boolean | null
+          fiduciary_selected_rule: string | null
           id: string
           principal_card_id: string | null
           principal_choice: string | null
           principal_is_correct: boolean | null
+          principal_selected_rule: string | null
           session_id: string
           status: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          current_card_index?: number
           fiduciary_card_id?: string | null
           fiduciary_choice?: string | null
           fiduciary_is_correct?: boolean | null
+          fiduciary_selected_rule?: string | null
           id?: string
           principal_card_id?: string | null
           principal_choice?: string | null
           principal_is_correct?: boolean | null
+          principal_selected_rule?: string | null
           session_id: string
           status?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          current_card_index?: number
           fiduciary_card_id?: string | null
           fiduciary_choice?: string | null
           fiduciary_is_correct?: boolean | null
+          fiduciary_selected_rule?: string | null
           id?: string
           principal_card_id?: string | null
           principal_choice?: string | null
           principal_is_correct?: boolean | null
+          principal_selected_rule?: string | null
           session_id?: string
           status?: string
           updated_at?: string
@@ -194,39 +203,51 @@ export type Database = {
       level2_sessions: {
         Row: {
           created_at: string
+          current_card_index: number
           fiduciary_card_id: string | null
           fiduciary_choice: string | null
           fiduciary_is_correct: boolean | null
+          fiduciary_selected_rule: string | null
           id: string
           principal_card_id: string | null
           principal_choice: string | null
           principal_is_correct: boolean | null
+          principal_selected_rule: string | null
+          selected_rule: string | null
           session_id: string
           status: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          current_card_index?: number
           fiduciary_card_id?: string | null
           fiduciary_choice?: string | null
           fiduciary_is_correct?: boolean | null
+          fiduciary_selected_rule?: string | null
           id?: string
           principal_card_id?: string | null
           principal_choice?: string | null
           principal_is_correct?: boolean | null
+          principal_selected_rule?: string | null
+          selected_rule?: string | null
           session_id: string
           status?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          current_card_index?: number
           fiduciary_card_id?: string | null
           fiduciary_choice?: string | null
           fiduciary_is_correct?: boolean | null
+          fiduciary_selected_rule?: string | null
           id?: string
           principal_card_id?: string | null
           principal_choice?: string | null
           principal_is_correct?: boolean | null
+          principal_selected_rule?: string | null
+          selected_rule?: string | null
           session_id?: string
           status?: string
           updated_at?: string

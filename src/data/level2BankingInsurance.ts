@@ -1013,6 +1013,22 @@ export const LEVEL2_BANKING_INSURANCE_CARDS: Level2Card[] = [
     correctChoice: "B",
     explanation: "Rule 17 empowers the Central Government to notify reduced or relaxed obligations for specific classes of Data Fiduciaries, including startups. DPIIT-recognized startups are a commonly cited beneficiary class, but they must await formal Central Government notification.",
   },
+  {
+    id: "B1702",
+    title: "Startup Exemption Is Not Automatic",
+    section: "Rule 17",
+    sector: "Cross-Sector",
+    summary: "Rule 17 only allows the Central Government to notify reduced obligations for notified classes of fiduciaries; startups are not automatically exempt.",
+    question: "A bank-backed startup tells customers it is automatically exempt from every DPDP obligation because it is a startup. Is that correct?",
+    choices: {
+      A: "Yes, all startups are fully exempt from the DPDP Rules",
+      B: "No, Rule 17 only allows the Central Government to notify reduced obligations for specified classes of Data Fiduciaries",
+      C: "Yes, but only if the startup is incorporated in India",
+      D: "Only if the startup uses a Consent Manager",
+    },
+    correctChoice: "B",
+    explanation: "Rule 17 is an enabling provision. It lets the Central Government notify reduced obligations for classes of Data Fiduciaries, but it does not create an automatic blanket exemption for startups.",
+  },
 
   // ═══════════════════════════════════════════════════════════
   // RULE 19 — Data Protection Board Proceedings

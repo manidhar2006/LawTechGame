@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGameSession } from "@/hooks/useGameSession";
 import {
-  getLevel1CardById,
   LEVEL1_PRINCIPLE_CARDS,
+  type Level1PrincipleCard,
   type Level1Choice,
 } from "@/data/level1Principles";
 import { LevelBadge, RoleBadge } from "@/components/ui/Badges";
@@ -20,8 +20,24 @@ interface Props {
 
 type Level1SessionRow = Tables<"level1_sessions">;
 
+const LEVEL1_QUESTIONS_PER_RULE = 7;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function buildLevel1CardsByRule(): Record<string, Level1PrincipleCard[]> {
+  return Object.fromEntries(
+    Object.entries(
+      LEVEL1_PRINCIPLE_CARDS.reduce<Record<string, Level1PrincipleCard[]>>((acc, card) => {
+        if (!acc[card.section]) acc[card.section] = [];
+        acc[card.section].push(card);
+        return acc;
+      }, {}),
+    )
+      .map(([rule, cards]) => [rule, cards.slice(0, LEVEL1_QUESTIONS_PER_RULE)])
+      .sort(([ruleA], [ruleB]) => parseInt(ruleA.replace("Rule ", "")) - parseInt(ruleB.replace("Rule ", ""))),
+  );
 }
 
 function useLevel1Session(sessionId: string | undefined, currentUserId: string | undefined) {
@@ -102,10 +118,121 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
   const { user, profile } = useAuth();
   const live = useGameSession(sessionId, user?.id);
   const level1 = useLevel1Session(sessionId, user?.id);
-  const completionSynced = useRef(false);
   const answeringSynced = useRef(false);
-  // Level-2 phase: toggled locally (host broadcasts via a metadata field or simple redirect)
+  // Level-2 starts when a level2_sessions row exists for this session.
   const [showLevel2, setShowLevel2] = useState(false);
+  const state = level1.state;
+
+  const cardsByRule = useMemo(() => buildLevel1CardsByRule(), []);
+  const sortedRules = useMemo(
+    () => Object.keys(cardsByRule).sort((a, b) => parseInt(a.replace("Rule ", "")) - parseInt(b.replace("Rule ", ""))),
+    [cardsByRule],
+  );
+  const myRole = live.me?.role ?? "fiduciary";
+  const mySelectedRule = state
+    ? myRole === "fiduciary"
+      ? state.fiduciary_selected_rule
+      : state.principal_selected_rule
+    : null;
+  const opponentSelectedRule = state
+    ? myRole === "fiduciary"
+      ? state.principal_selected_rule
+      : state.fiduciary_selected_rule
+    : null;
+  const opponentRuleCards = opponentSelectedRule ? cardsByRule[opponentSelectedRule] ?? [] : [];
+  const currentCardIndex = state?.current_card_index ?? 0;
+  const currentStep = opponentSelectedRule ? currentCardIndex + 1 : 0;
+  const nextQuestionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex + 1] ?? null : null;
+  const myChoice = state
+    ? myRole === "fiduciary"
+      ? state.fiduciary_choice
+      : state.principal_choice
+    : null;
+  const opponentChoice = state
+    ? myRole === "fiduciary"
+      ? state.principal_choice
+      : state.fiduciary_choice
+    : null;
+  const questionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex] ?? null : null;
+  const canAdvanceQuestion = state?.status === "answering" && !!state.fiduciary_choice && !!state.principal_choice;
+
+  useEffect(() => {
+    if (!state) return;
+    const bothRulesChosen = !!state.fiduciary_selected_rule && !!state.principal_selected_rule;
+    if (!bothRulesChosen) {
+      answeringSynced.current = false;
+      if (state.status !== "selecting") {
+        void level1.updateState({ status: "selecting" }).catch(() => {
+          // ignore transient sync errors
+        });
+      }
+      return;
+    }
+
+    const fiduciaryCards = state.fiduciary_selected_rule ? cardsByRule[state.fiduciary_selected_rule] ?? [] : [];
+    const principalCards = state.principal_selected_rule ? cardsByRule[state.principal_selected_rule] ?? [] : [];
+    const hasCurrentQuestion = !!fiduciaryCards[currentCardIndex] && !!principalCards[currentCardIndex];
+
+    if (!hasCurrentQuestion) {
+      if (state.status !== "completed") {
+        void level1.updateState({ status: "completed" }).catch(() => {
+          // ignore transient sync errors
+        });
+      }
+      answeringSynced.current = false;
+      return;
+    }
+
+    if (state.status !== "answering" && !answeringSynced.current) {
+      answeringSynced.current = true;
+      void level1.updateState({ status: "answering" }).catch(() => {
+        answeringSynced.current = false;
+      });
+    }
+  }, [cardsByRule, currentCardIndex, level1, state, state?.fiduciary_selected_rule, state?.principal_selected_rule, state?.status]);
+
+  // Move to Level-2 when a level2_sessions row exists. This avoids writing an
+  // invalid game_sessions.status value outside the DB check constraint.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    let mounted = true;
+
+    const checkLevel2 = async () => {
+      const { data } = await supabase
+        .from("level2_sessions")
+        .select("id")
+        .eq("session_id", sessionId)
+        .maybeSingle();
+
+      if (mounted) {
+        setShowLevel2(!!data);
+      }
+    };
+
+    void checkLevel2();
+
+    const channel = supabase
+      .channel(`level2-gate:${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "level2_sessions",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => {
+          void checkLevel2();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
 
   if (live.loading || level1.loading || !live.session || !live.me || !user) {
     return (
@@ -158,34 +285,35 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
       </div>
     );
   }
-
-  const state = level1.state;
-  const myRole = live.me.role;
-  const myCardId = myRole === "fiduciary" ? state.fiduciary_card_id : state.principal_card_id;
-  const opponentCardId = myRole === "fiduciary" ? state.principal_card_id : state.fiduciary_card_id;
-  const myChoice = myRole === "fiduciary" ? state.fiduciary_choice : state.principal_choice;
-  const opponentChoice = myRole === "fiduciary" ? state.principal_choice : state.fiduciary_choice;
-
-  const mySelectedCard = getLevel1CardById(myCardId);
-  const opponentSelectedCard = getLevel1CardById(opponentCardId);
-  const questionCard = getLevel1CardById(opponentCardId);
-
-  const handlePickCard = async (cardId: string) => {
-    if (state.status !== "selecting") return;
-    if (myCardId) return;
-
-    const patch: Partial<Level1SessionRow> =
-      myRole === "fiduciary" ? { fiduciary_card_id: cardId } : { principal_card_id: cardId };
-
-    const fidCard = myRole === "fiduciary" ? cardId : state.fiduciary_card_id;
-    const priCard = myRole === "principal" ? cardId : state.principal_card_id;
-    if (fidCard && priCard) patch.status = "answering";
+  const handleSelectRule = async (rule: string) => {
+    if (!cardsByRule[rule]?.length) return;
+    if (mySelectedRule) return;
 
     try {
-      await level1.updateState(patch);
-      toast.success("Card locked.");
+      const patch: Partial<Level1SessionRow> =
+        myRole === "fiduciary"
+          ? {
+              fiduciary_selected_rule: rule,
+              fiduciary_card_id: null,
+              fiduciary_choice: null,
+              fiduciary_is_correct: null,
+            }
+          : {
+              principal_selected_rule: rule,
+              principal_card_id: null,
+              principal_choice: null,
+              principal_is_correct: null,
+            };
+
+      await level1.updateState({
+        ...patch,
+        current_card_index: 0,
+        status: "selecting",
+      });
+      answeringSynced.current = false;
+      toast.success(`${rule} selected.`);
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Could not lock card");
+      toast.error(error instanceof Error ? error.message : "Could not start rule");
     }
   };
 
@@ -209,10 +337,6 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             principal_choice: choice,
             principal_is_correct: isCorrect,
           };
-
-    if (opponentChoice) {
-      choicePatch.status = "completed";
-    }
 
     try {
       await Promise.all([
@@ -238,48 +362,40 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
     }
   };
 
-  useEffect(() => {
-    if (state.status === "completed") {
-      completionSynced.current = false;
-      return;
-    }
-    if (!state.fiduciary_choice || !state.principal_choice) return;
-    if (completionSynced.current) return;
-    completionSynced.current = true;
-    void level1.updateState({ status: "completed" }).catch(() => {
-      completionSynced.current = false;
-    });
-  }, [level1, state.fiduciary_choice, state.principal_choice, state.status]);
+  const handleNextQuestion = async () => {
+    if (!state || !canAdvanceQuestion) return;
 
-  useEffect(() => {
-    if (state.status !== "selecting") {
-      answeringSynced.current = false;
-      return;
-    }
-    if (!state.fiduciary_card_id || !state.principal_card_id) return;
-    if (answeringSynced.current) return;
-    answeringSynced.current = true;
-    void level1.updateState({ status: "answering" }).catch(() => {
-      answeringSynced.current = false;
-    });
-  }, [level1, state.fiduciary_card_id, state.principal_card_id, state.status]);
+    const nextCardIndex = currentCardIndex + 1;
+    const hasNextQuestion = !!nextQuestionCard;
 
-  // Move to Level-2 (both players see this via the shared game_sessions metadata field)
-  // We reuse the game_sessions.status field: when the host sets it to "level2", both
-  // clients will mount MultiplayerLevel2Game instead.
-  useEffect(() => {
-    if (live.session?.status === "level2") {
-      setShowLevel2(true);
+    try {
+      await level1.updateState({
+        current_card_index: nextCardIndex,
+        fiduciary_choice: null,
+        principal_choice: null,
+        fiduciary_is_correct: null,
+        principal_is_correct: null,
+        status: hasNextQuestion ? "answering" : "completed",
+      });
+      answeringSynced.current = false;
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not advance to the next question");
     }
-  }, [live.session?.status]);
+  };
 
   const startLevel2 = async () => {
     if (!isHost) return;
-    await supabase
-      .from("game_sessions")
-      .update({ status: "level2" })
-      .eq("id", sessionId);
-    // Local state will be updated by the useEffect above via realtime
+
+    const { error } = await supabase
+      .from("level2_sessions")
+      .upsert({ session_id: sessionId }, { onConflict: "session_id" });
+
+    if (error) {
+      toast.error(error.message || "Could not start Level-2");
+      return;
+    }
+
+    setShowLevel2(true);
   };
 
   const finishLevel1ToRecap = async () => {
@@ -331,23 +447,35 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
           <section>
             <h1 className="font-display text-2xl mb-1">Level-1: Principle Duel</h1>
             <p className="text-sm text-muted-foreground mb-5">
-              Both players pick one DPDP principle card. You answer a question from your opponent's selected card.
+              Each player selects a DPDP principle rule independently. The questions appear one by one from the other player's selected rule.
             </p>
 
-            {state.status === "selecting" && (
+            {!mySelectedRule && (
               <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
-                {myCardId
-                  ? "Card selected. Waiting for the other player to lock their card."
-                  : `Pick one card from the ${LEVEL1_PRINCIPLE_CARDS.length} principles below.`}
+                Choose your rule first. Your opponent will answer the questions from the rule you select.
               </div>
             )}
 
-            {state.status !== "selecting" && questionCard && (
+            {mySelectedRule && state.status === "selecting" && (
+              <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
+                Waiting for {opponentName} to select their rule. After that, questions from {mySelectedRule} will appear one by one for the other player.
+              </div>
+            )}
+
+            {questionCard && state.status === "answering" && (
               <article className="rounded-xl border border-border bg-surface p-5 mb-5">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-2">
-                  <span>{questionCard.section}</span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-2 flex-wrap">
+                  <span className="font-semibold text-[11px] text-foreground/70">{opponentSelectedRule ?? "Selected rule"}</span>
                   <span>·</span>
-                  <span>Selected by {opponentName}</span>
+                  <span>{currentStep} / {opponentRuleCards.length} questions</span>
+                  <span>·</span>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{
+                    background: `color-mix(in srgb, ${"var(--fiduciary)"} 15%, transparent)`,
+                    color: "var(--fiduciary)",
+                    border: `1px solid color-mix(in srgb, ${"var(--fiduciary)"} 30%, transparent)`,
+                  }}>
+                    {questionCard.section}
+                  </span>
                 </div>
                 <h2 className="font-display text-xl mb-1">{questionCard.title}</h2>
                 <p className="text-sm text-muted-foreground mb-3">{questionCard.summary}</p>
@@ -383,8 +511,25 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
 
                 {myChoice && (
                   <div className="mt-4 rounded-md border border-border bg-surface-2/60 p-3 text-sm">
-                    <p className="font-medium mb-1">Your answer: {myChoice}</p>
+                    <p className="font-medium mb-1">
+                      Your answer: {myChoice} — {myChoice === questionCard.correctChoice ? "✅ Correct!" : "❌ Incorrect"}
+                    </p>
                     <p className="text-muted-foreground">{questionCard.explanation}</p>
+                  </div>
+                )}
+
+                {canAdvanceQuestion && (
+                  <div className="mt-4 flex items-center justify-between gap-3 flex-wrap rounded-md border border-border bg-surface-2/40 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Both players answered. Click next to load {nextQuestionCard ? "the next question" : "the final result"}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleNextQuestion()}
+                      className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+                    >
+                      {nextQuestionCard ? "Next Question →" : "Finish Level-1 →"}
+                    </button>
                   </div>
                 )}
               </article>
@@ -423,42 +568,53 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             )}
 
             <section>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium">DPDP Principle Cards ({LEVEL1_PRINCIPLE_CARDS.length})</h3>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {myCardId ? `Locked: ${myCardId}` : "Not locked"}
-                </span>
+              <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                <h3 className="text-sm font-medium">Pick Your Rule</h3>
+                <span className="text-xs text-muted-foreground font-mono">{mySelectedRule ?? "Not selected"}</span>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {LEVEL1_PRINCIPLE_CARDS.map((card) => {
-                  const selectedByMe = myCardId === card.id;
-                  const selectedByOther = opponentCardId === card.id;
-                  const isDisabled = state.status !== "selecting" || !!myCardId;
+                {sortedRules.map((rule) => {
+                  const ruleCardsCount = cardsByRule[rule]?.length ?? 0;
+                  const ruleNum = parseInt(rule.replace("Rule ", ""));
+                  const accent = ruleNum % 3 === 0
+                    ? "var(--gold)"
+                    : ruleNum % 3 === 1
+                    ? "var(--fiduciary)"
+                    : "var(--principal)";
+                  const isSelected = mySelectedRule === rule;
 
                   return (
                     <button
-                      key={card.id}
-                      disabled={isDisabled}
-                      onClick={() => void handlePickCard(card.id)}
+                      key={rule}
+                      onClick={() => void handleSelectRule(rule)}
+                      disabled={!!mySelectedRule}
                       className={[
                         "rounded-lg border text-left p-3 bg-surface transition",
-                        !isDisabled && "hover:border-primary/50",
-                        selectedByMe && "border-accent bg-accent/10",
-                        selectedByOther && "border-[var(--principal)]/45",
-                        !selectedByMe && !selectedByOther && "border-border",
-                        isDisabled && !selectedByMe && "opacity-80",
+                        !mySelectedRule && "hover:border-primary/50",
+                        isSelected && "border-accent bg-accent/10",
+                        !isSelected && "border-border",
+                        mySelectedRule && !isSelected && "opacity-70",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-mono text-xs text-muted-foreground">{card.id}</span>
-                        <span className="text-[10px] text-muted-foreground">{card.section}</span>
+                        <span
+                          className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                          style={{
+                            background: `color-mix(in srgb, ${accent} 12%, transparent)`,
+                            color: accent,
+                            border: `1px solid color-mix(in srgb, ${accent} 25%, transparent)`,
+                          }}
+                        >
+                          {rule}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{ruleCardsCount} cards</span>
                       </div>
-                      <p className="font-medium text-sm leading-snug">{card.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{card.summary}</p>
-                      {selectedByMe && <p className="text-[11px] text-accent mt-2">Selected by you</p>}
-                      {selectedByOther && <p className="text-[11px] text-[var(--principal)] mt-2">Selected by opponent</p>}
+                      <p className="font-medium text-sm leading-snug">{isSelected ? "Your rule" : "Start this rule"}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        The questions from this rule will be shown one by one to the other player.
+                      </p>
                     </button>
                   );
                 })}
@@ -538,15 +694,21 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h3 className="font-display text-lg mb-3">Round State</h3>
+              <h3 className="font-display text-lg mb-3">Rule State</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span>{myName} card</span>
-                  <span className="font-mono text-xs">{mySelectedCard?.id ?? "-"}</span>
+                  <span>Your rule</span>
+                  <span className="font-mono text-xs">{mySelectedRule ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>{opponentName} card</span>
-                  <span className="font-mono text-xs">{opponentSelectedCard?.id ?? "-"}</span>
+                  <span>Opponent rule</span>
+                  <span className="font-mono text-xs">{opponentSelectedRule ?? "—"}</span>
+                </li>
+                <li className="flex items-center justify-between gap-3">
+                  <span>Progress</span>
+                  <span className="font-mono text-xs">
+                    {mySelectedRule && opponentSelectedRule ? `${currentStep} question${currentStep === 1 ? "" : "s"}` : "waiting"}
+                  </span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
                   <span>{myName} answer</span>
@@ -560,12 +722,13 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
             </section>
 
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h3 className="font-display text-lg mb-2">Level-1 Rules</h3>
+              <h3 className="font-display text-lg mb-2">How Level-1 Works</h3>
               <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>Fiduciary and Principal each pick one DPDP principle card.</li>
-                <li>You answer the question from the card picked by the other role.</li>
+                <li>Each player selects a DPDP principle rule independently.</li>
+                <li>Then the cards from the other player's rule appear one by one.</li>
+                <li>You answer the questions from the opponent's selected rule.</li>
                 <li>+100 for correct, −50 for incorrect answers.</li>
-                <li>After both answer, host starts Level-2 with Banking &amp; Insurance sector questions.</li>
+                <li>When the rule queues end, the host can start Level-2.</li>
               </ol>
             </section>
           </aside>
