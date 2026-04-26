@@ -51,27 +51,6 @@ function AuthPage() {
     }
   };
 
-  const handleGuest = async () => {
-    setLoading(true);
-    try {
-      const guestName = `Agent_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      const guestEmail = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@dataguardian.local`;
-      const guestPass = crypto.randomUUID();
-      const { data, error } = await supabase.auth.signUp({
-        email: guestEmail,
-        password: guestPass,
-        options: { data: { display_name: guestName } },
-      });
-      if (error) throw error;
-      toast.success(`Welcome, ${guestName}!`);
-      navigate({ to: "/lobby" });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Guest login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen">
       <AppHeader />
@@ -129,20 +108,6 @@ function AuthPage() {
               {loading ? "..." : tab === "signin" ? "Sign In" : "Create Account"}
             </button>
           </form>
-
-          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex-1 h-px bg-border" />
-            OR
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          <button
-            onClick={handleGuest}
-            disabled={loading}
-            className="w-full py-2.5 rounded-md border border-border bg-surface-2 hover:border-primary/40 transition"
-          >
-            Continue as Guest
-          </button>
 
           <p className="text-xs text-muted-foreground mt-4 text-center">
             <Link to="/" className="hover:text-foreground">← Back home</Link>
