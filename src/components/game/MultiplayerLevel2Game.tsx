@@ -12,6 +12,12 @@ import {
   LEVEL1_PRINCIPLE_CARDS,
   type Level1PrincipleCard,
 } from "@/data/level1Principles";
+import {
+  getSectionDisplayName,
+  getSectionExplanation,
+  getPrincipleMetaFromSection,
+  getSectionTag,
+} from "@/data/principles";
 import { LevelBadge, RoleBadge } from "@/components/ui/Badges";
 import { VoiceRoomPanel } from "@/components/game/VoiceRoomPanel";
 import { toast } from "sonner";
@@ -55,12 +61,14 @@ function convertLevel1CardToLevel2Card(
 
 function buildLevel2CardsByRule(): Record<string, Level2Card[]> {
   const groupedLevel2 = LEVEL2_BANKING_INSURANCE_CARDS.reduce<Record<string, Level2Card[]>>((acc, card) => {
+    if (!getPrincipleMetaFromSection(card.section)) return acc;
     if (!acc[card.section]) acc[card.section] = [];
     acc[card.section].push(card);
     return acc;
   }, {});
 
   const groupedLevel1 = LEVEL1_PRINCIPLE_CARDS.reduce<Record<string, Level1PrincipleCard[]>>((acc, card) => {
+    if (!getPrincipleMetaFromSection(card.section)) return acc;
     if (!acc[card.section]) acc[card.section] = [];
     acc[card.section].push(card);
     return acc;
@@ -200,6 +208,8 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
       : state.fiduciary_choice
     : null;
   const questionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex] ?? null : null;
+  const mySelectedTopicName = mySelectedRule ? getSectionDisplayName(mySelectedRule) : null;
+  const mySelectedTopicExplanation = mySelectedRule ? getSectionExplanation(mySelectedRule) : null;
 
   useEffect(() => {
     if (!state) {
@@ -308,7 +318,7 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
         status: "selecting",
       });
       answeringSynced.current = false;
-      toast.success(`${rule} selected.`);
+      toast.success(`${getSectionDisplayName(rule)} selected.`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Could not start rule");
     }
@@ -456,21 +466,21 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
 
             {!mySelectedRule && (
               <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
-                Choose your rule first. Your opponent will answer the questions from the rule you select.
+                Choose your principle first. Your opponent will answer the questions from the principle you select.
               </div>
             )}
 
             {mySelectedRule && state.status === "selecting" && (
               <div className="rounded-xl border border-border bg-surface p-4 mb-5 text-sm text-muted-foreground">
-                Waiting for {opponentName} to select their rule. After that, questions from {mySelectedRule} will appear one by one for the other player.
+                Waiting for {opponentName} to select their principle. After that, questions from {getSectionDisplayName(mySelectedRule)} will appear one by one for the other player.
               </div>
             )}
 
             {!mySelectedRule && (
               <section className="mb-5">
                 <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                  <h3 className="text-sm font-medium">Pick Your Rule</h3>
-                  <span className="text-xs text-muted-foreground font-mono">{mySelectedRule ?? "Not selected"}</span>
+                  <h3 className="text-sm font-medium">Pick Your Principle</h3>
+                  <span className="text-xs text-muted-foreground font-mono">{mySelectedTopicName ?? "Not selected"}</span>
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {sortedRules.map((rule) => {
@@ -507,18 +517,29 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
                               border: `1px solid color-mix(in srgb, ${accent} 25%, transparent)`,
                             }}
                           >
-                            {rule}
+                            {getSectionTag(rule)}
                           </span>
                           <span className="text-[10px] text-muted-foreground">{ruleCardsCount} cards</span>
                         </div>
-                        <p className="font-medium text-sm leading-snug">{isSelected ? "Your rule" : "Start this rule"}</p>
+                        <p className="font-medium text-sm leading-snug">
+                          {isSelected ? "Your principle" : getSectionDisplayName(rule)}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          The card you lock in this rule becomes the question for the other player.
+                          {getSectionExplanation(rule) ?? "The card you lock in this principle becomes the question for the other player."}
                         </p>
                       </button>
                     );
                   })}
                 </div>
+                {mySelectedTopicExplanation && (
+                  <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                      Selected Principle
+                    </p>
+                    <p className="font-medium text-sm mb-1">{mySelectedTopicName}</p>
+                    <p className="text-xs text-muted-foreground">{mySelectedTopicExplanation}</p>
+                  </div>
+                )}
               </section>
             )}
 
@@ -659,18 +680,20 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
                 <h3 className="text-sm font-medium">Rule State</h3>
                 <span className="text-xs text-muted-foreground font-mono">
-                  {mySelectedRule ? `You: ${mySelectedRule}` : "Pick your rule"}
+                  {mySelectedTopicName ? `You: ${mySelectedTopicName}` : "Pick your principle"}
                 </span>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-3 text-sm">
                 <div className="rounded-lg border border-border bg-surface-2 p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Your rule</div>
-                  <div className="font-medium">{mySelectedRule ?? "Not selected"}</div>
+                  <div className="text-xs text-muted-foreground mb-1">Your principle</div>
+                  <div className="font-medium">{mySelectedTopicName ?? "Not selected"}</div>
                 </div>
                 <div className="rounded-lg border border-border bg-surface-2 p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Opponent rule</div>
-                  <div className="font-medium">{opponentSelectedRule ?? "Not selected"}</div>
+                  <div className="text-xs text-muted-foreground mb-1">Opponent principle</div>
+                  <div className="font-medium">
+                    {opponentSelectedRule ? getSectionDisplayName(opponentSelectedRule) : "Not selected"}
+                  </div>
                 </div>
               </div>
             </section>
@@ -751,12 +774,12 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
               <h3 className="font-display text-lg mb-3">Rule State</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span>Your rule</span>
-                  <span className="font-mono text-xs">{mySelectedRule ?? "—"}</span>
+                  <span>Your principle</span>
+                  <span className="font-mono text-xs">{mySelectedTopicName ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>Opponent rule</span>
-                  <span className="font-mono text-xs">{opponentSelectedRule ?? "—"}</span>
+                  <span>Opponent principle</span>
+                  <span className="font-mono text-xs">{opponentSelectedRule ? getSectionDisplayName(opponentSelectedRule) : "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
                   <span>Progress</span>
@@ -804,7 +827,7 @@ export function MultiplayerLevel2Game({ sessionId }: Props) {
                   <span>Cross-Sector — Bancassurance, TDSAT</span>
                 </div>
                 <div className="mt-2 pt-2 border-t border-border text-muted-foreground">
-                  Cards grouped by DPDP Rule 1–23
+                  Cards grouped by DPDP Principle 1–9
                 </div>
               </div>
             </section>

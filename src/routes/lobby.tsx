@@ -135,7 +135,7 @@ function ModeSelection() {
             <div className="text-2xl mb-2">⚡</div>
             <h2 className="font-display text-xl mb-1">Multiplayer (live)</h2>
             <p className="text-sm text-muted-foreground">
-              One Fiduciary and one Principal play Level-1 (DPDP Principles) and Level-2 (Banking &amp; Insurance sector) with live voice and cross-questioning.
+              Two players compete in Level-1 (DPDP Principles) and Level-2 (Banking &amp; Insurance sector) with live voice.
             </p>
           </Link>
         </div>
@@ -144,34 +144,7 @@ function ModeSelection() {
   );
 }
 
-function RoleCardPicker({ onPick }: { onPick: (r: Role) => void }) {
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      <button onClick={() => onPick("fiduciary")} className="text-left rounded-xl border border-border bg-surface p-6 hover:border-[var(--fiduciary)]/60 transition">
-        <RoleBadge role="fiduciary" />
-        <h2 className="font-display text-xl mt-2 mb-2">The Bank / Agency</h2>
-        <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-          <li>Handle data breaches in 72 hrs</li>
-          <li>Approve / reject vendor data access</li>
-          <li>Manage customer consent</li>
-          <li>Balance compliance vs revenue</li>
-        </ul>
-        <p className="text-xs mt-3 text-[var(--fiduciary)]">Manages compliance, revenue & shift timer</p>
-      </button>
-      <button onClick={() => onPick("principal")} className="text-left rounded-xl border border-border bg-surface p-6 hover:border-[var(--principal)]/60 transition">
-        <RoleBadge role="principal" />
-        <h2 className="font-display text-xl mt-2 mb-2">The Customer</h2>
-        <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-          <li>Request data deletion</li>
-          <li>Correct wrong information</li>
-          <li>Withdraw consent</li>
-          <li>Challenge unnecessary data collection</li>
-        </ul>
-        <p className="text-xs mt-3 text-[var(--principal)]">Focus purely on rights & compliance decisions</p>
-      </button>
-    </div>
-  );
-}
+
 
 function SoloFlow({ userId, displayName }: { userId: string; displayName: string }) {
   const navigate = useNavigate();
@@ -239,7 +212,8 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
-  const hostNewRoom = async (hostRole: Role) => {
+  const hostNewRoom = async () => {
+    const hostRole: Role = "fiduciary";
     setBusy(true);
     try {
       await ensureProfileExists(userId, displayName);
@@ -291,30 +265,18 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
       <main className="max-w-2xl mx-auto px-4 pt-12">
         <h1 className="font-display text-3xl mb-2">Multiplayer (live)</h1>
         <p className="text-muted-foreground mb-8">
-          Hi {displayName}. Room creator can be either role. Create as Fiduciary or Data Principal,
-          then invite the opposite role for the Level-1 → Level-2 live experience.
+          Hi {displayName}. Play Level-1 (DPDP Principles) and Level-2 (Banking & Insurance sector) as two players in real-time.
         </p>
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 gap-4">
           <button
-            onClick={() => hostNewRoom("fiduciary")}
+            onClick={() => void hostNewRoom()}
             disabled={busy}
             className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40 disabled:opacity-50"
           >
             <div className="text-xl mb-2">🆕</div>
-            <h2 className="font-display text-lg">Host as Fiduciary</h2>
+            <h2 className="font-display text-lg">Host Game</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Get a room code and invite one Principal.
-            </p>
-          </button>
-          <button
-            onClick={() => hostNewRoom("principal")}
-            disabled={busy}
-            className="rounded-xl border border-border bg-surface p-6 text-left hover:border-primary/40 disabled:opacity-50"
-          >
-            <div className="text-xl mb-2">🆕</div>
-            <h2 className="font-display text-lg">Host as Principal</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Get a room code and invite one Fiduciary.
+              Create a new room and get a code to share with another player.
             </p>
           </button>
           <Link
@@ -325,7 +287,7 @@ function MultiplayerHostFlow({ userId, displayName }: { userId: string; displayN
             <div className="text-xl mb-2">🔗</div>
             <h2 className="font-display text-lg">Join Existing Room</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter a 6-character room code. You will join as the missing role.
+              Enter a 6-character room code to join another player.
             </p>
           </Link>
         </div>

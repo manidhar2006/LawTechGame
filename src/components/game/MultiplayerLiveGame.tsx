@@ -8,6 +8,12 @@ import {
   type Level1PrincipleCard,
   type Level1Choice,
 } from "@/data/level1Principles";
+import {
+  getSectionDisplayName,
+  getSectionExplanation,
+  getPrincipleMetaFromSection,
+  getSectionTag,
+} from "@/data/principles";
 import { LevelBadge, RoleBadge } from "@/components/ui/Badges";
 import { VoiceRoomPanel } from "@/components/game/VoiceRoomPanel";
 import { MultiplayerLevel2Game } from "@/components/game/MultiplayerLevel2Game";
@@ -30,6 +36,7 @@ function buildLevel1CardsByRule(): Record<string, Level1PrincipleCard[]> {
   return Object.fromEntries(
     Object.entries(
       LEVEL1_PRINCIPLE_CARDS.reduce<Record<string, Level1PrincipleCard[]>>((acc, card) => {
+        if (!getPrincipleMetaFromSection(card.section)) return acc;
         if (!acc[card.section]) acc[card.section] = [];
         acc[card.section].push(card);
         return acc;
@@ -154,6 +161,8 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
       : state.fiduciary_choice
     : null;
   const questionCard = opponentSelectedRule ? opponentRuleCards[currentCardIndex] ?? null : null;
+  const mySelectedTopicName = mySelectedRule ? getSectionDisplayName(mySelectedRule) : null;
+  const mySelectedTopicExplanation = mySelectedRule ? getSectionExplanation(mySelectedRule) : null;
   const canAdvanceQuestion = state?.status === "answering" && !!state.fiduciary_choice && !!state.principal_choice;
 
   useEffect(() => {
@@ -311,7 +320,7 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
         status: "selecting",
       });
       answeringSynced.current = false;
-      toast.success(`${rule} selected.`);
+      toast.success(`${getSectionDisplayName(rule)} selected.`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Could not start rule");
     }
@@ -569,8 +578,8 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
 
             <section>
               <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                <h3 className="text-sm font-medium">Pick Your Rule</h3>
-                <span className="text-xs text-muted-foreground font-mono">{mySelectedRule ?? "Not selected"}</span>
+                <h3 className="text-sm font-medium">Pick Your Principle</h3>
+                <span className="text-xs text-muted-foreground font-mono">{mySelectedTopicName ?? "Not selected"}</span>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {sortedRules.map((rule) => {
@@ -607,18 +616,29 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
                             border: `1px solid color-mix(in srgb, ${accent} 25%, transparent)`,
                           }}
                         >
-                          {rule}
+                          {getSectionTag(rule)}
                         </span>
                         <span className="text-[10px] text-muted-foreground">{ruleCardsCount} cards</span>
                       </div>
-                      <p className="font-medium text-sm leading-snug">{isSelected ? "Your rule" : "Start this rule"}</p>
+                      <p className="font-medium text-sm leading-snug">
+                        {isSelected ? "Your principle" : getSectionDisplayName(rule)}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        The questions from this rule will be shown one by one to the other player.
+                        {getSectionExplanation(rule) ?? "The questions from this principle will be shown one by one to the other player."}
                       </p>
                     </button>
                   );
                 })}
               </div>
+              {mySelectedTopicExplanation && (
+                <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Selected Principle
+                  </p>
+                  <p className="font-medium text-sm mb-1">{mySelectedTopicName}</p>
+                  <p className="text-xs text-muted-foreground">{mySelectedTopicExplanation}</p>
+                </div>
+              )}
             </section>
           </section>
 
@@ -697,12 +717,12 @@ export function MultiplayerLiveGame({ sessionId }: Props) {
               <h3 className="font-display text-lg mb-3">Rule State</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center justify-between gap-3">
-                  <span>Your rule</span>
-                  <span className="font-mono text-xs">{mySelectedRule ?? "—"}</span>
+                  <span>Your principle</span>
+                  <span className="font-mono text-xs">{mySelectedTopicName ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
-                  <span>Opponent rule</span>
-                  <span className="font-mono text-xs">{opponentSelectedRule ?? "—"}</span>
+                  <span>Opponent principle</span>
+                  <span className="font-mono text-xs">{opponentSelectedRule ? getSectionDisplayName(opponentSelectedRule) : "—"}</span>
                 </li>
                 <li className="flex items-center justify-between gap-3">
                   <span>Progress</span>
